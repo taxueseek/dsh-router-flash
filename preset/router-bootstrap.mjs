@@ -1,5 +1,5 @@
 /**
- * router-bootstrap: DeepSeek V4 Flash 神模式引导（渠道无关）。
+ * router-bootstrap: 探索模式 —— DeepSeek V4 Flash 的任务分类与工具面路由（渠道无关）。
  *
  * 在 system-prompt/assemble 阶段，把 DeepSeek Flash 模型（模型 id 同时含
  * "deepseek" 与 "flash"，不看 provider）强制路由到 weak 模式（作者

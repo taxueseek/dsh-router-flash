@@ -1,14 +1,10 @@
-# dsh-router-flash
+# 探索模式（dsh-router-flash）
 
-> 让 **DeepSeek V4 Flash** 从「鬼模式」切换到「神模式」的 dsh agent preset 标准分发包。只要模型 id 同时含 `deepseek` 与 `flash` 就生效，**不绑定任何供应商渠道**。
+> DeepSeek V4 Flash 的 dsh agent preset。模型 id 同时含 `deepseek` 与 `flash` 即生效，不绑定渠道。
 
-标准 DSH bundle 插件包：安装后自动把 `router-flash` preset 同步到 `~/.dsh/.agent-presets/router-flash`，重启 DSH 即生效。原 `install.sh` 手动复制方式已由本 bundle 替代。
+安装后自动把 preset 同步到 `~/.dsh/.agent-presets/router-flash`，重启 DSH 即生效。
 
-## 这是什么
-
-一个 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）的 agent preset 分发包。它把 [dsh-router-standard](https://github.com/yjh051108/dsh-router-standard) 研究里为 **DeepSeek V4 Flash** 标定的最优引导（w7 persona + 深度思考锚）路由逻辑做成与渠道无关的 preset：**看模型身份，不看 provider**。
-
-**核心问题**：Flash 在默认（无引导）条件下会进入「鬼模式」——思考浅、草草动手、质量差。这不是 Flash 能力不行，而是**引导条件不对**。补上正确的引导（分类 + 回顾 + 反跑题 + 深度思考 + 决策闭环），Flash 就能进入「神模式」——深度规划、高质量交付、自测零错误。
+它做的事：先判断任务是「建」还是「修」，按类型选引导；首轮只给核心工具（`read` / `write` / `edit` + 平台 shell），首次工具调用后放开全部工具。
 
 ## 命中规则（渠道无关）
 

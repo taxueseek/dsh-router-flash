@@ -9,7 +9,7 @@
  *     pro:   spec 句 + few-shot 路由指令（w6）
  *     flash: neutral + 显式分类指令 + 回顾/收敛/反跑题锚（w7）
  *
- * 本文件只保留 Flash 神模式引导所需的最小核心。
+ * 本文件只保留路由所需的最小核心。
  */
 
 const SPEC_PERSONA = 'You are a helpful software engineer assistant.'

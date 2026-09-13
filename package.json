@@ -2,7 +2,7 @@
   "name": "dsh-router-flash",
   "version": "0.3.1",
   "license": "MIT",
-  "description": "DSH agent preset 分发包：DeepSeek V4 Flash 神模式（模型 id 命中即生效，不绑定渠道）——启动时自动把 router-flash preset 安装到 ~/.dsh/.agent-presets。",
+  "description": "DSH agent preset 分发包：探索模式（DeepSeek V4 Flash，模型 id 命中即生效，不绑定渠道）。安装后自动把 router-flash preset 同步到 ~/.dsh/.agent-presets。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
