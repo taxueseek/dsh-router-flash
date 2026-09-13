@@ -165,15 +165,18 @@ assert.equal(shellless.tools.map((t) => t.name).join(','), 'read,write,edit',
 assert.equal(warnings.length, 1, '降级必须留下告警')
 assert.ok(/bash\/pwsh/.test(warnings[0]))
 
-// --- 8. 组合必须覆盖宿主交还给 preset 的行 ----------------------------------
-// `dsh-web-app` 在宿主层把这 23 行设为 disabled，把 agent 面交给 preset；
-// 在 Web 部署里，preset 少写一行 = 该能力对它的 agent 直接不存在。实测：
-// 少了 command-goal 行，commands.list() 就没有 goal。
+// --- 8. 组合与宿主所有权的一致性 --------------------------------------------
+// `dsh-web-app` 在宿主层把 23 个 agent 面行设为 disabled，把 agent 面交给 preset；
+// 在 Web 部署里，preset 少写一行 = 该能力对它的 agent 直接不存在。
 // 清单来自 dsh-web-app/cordis.patch.yml 的 `disabled: true` 行（0.1.5-rc.2），
 // 内联在此以免自检依赖某个具体安装路径。
+//
+// 例外：`command-goal` 故意不补（保持上游家族的工具面，见 README「工具面」）。
+// 宿主确实把它交了出来，所以这里不是「漏了」而是「决定了不要」——因此它从
+// 必须存在的清单里移出，改为单独的「必须不存在」断言，防止将来顺手指回。
 const HOST_DELEGATED_ROWS = [
   'tool-bash', 'tool-pwsh', 'tool-jobs', 'tool-fs', 'tool-fs-search',
-  'skill-filesystem', 'tool-skill', 'command-goal', 'tool-goal', 'plan-mode',
+  'skill-filesystem', 'tool-skill', 'tool-goal', 'plan-mode',
   'compaction-basic', 'command-compact', 'tool-result-pruner',
   'tool-subagent-control', 'tool-subagent-list-agents', 'tool-subagent',
   'tool-subagent-fork', 'workflow-worker-thread', 'tool-workflow', 'tool-ralph',
@@ -186,11 +189,16 @@ const missingRows = HOST_DELEGATED_ROWS.filter((id) => !composition.includes(`- 
 assert.deepEqual(missingRows, [],
   `宿主已把下列行交给 preset，组合里不能缺：${missingRows.join(', ')}`)
 
-// `fetch: false` 会真的摘掉 web_fetch（宿主行已禁用时 preset 行才是归属者），
-// 且它是宿主默认授予的能力，不该由路由预设替用户关掉。
+// 模型可见的目录跟随上游家族，不增不减：`present` 是模型可见的加法（描述约
+// 464 字符），`command-goal` 虽不占模型上下文，但补它同样是偏离家族工具面。
+// 两条都保持家族的「不写」。真要有意开启，先改这里并写下理由。
+assert.equal(/\n- id: command-goal\n/.test(composition), false,
+  'command-goal 故意不补：保持上游家族工具面')
+assert.equal(/\n- id: present\n/.test(composition), false,
+  'present 故意不补：模型可见的加法，需要测量')
+
 // 工具面取值跟随 router-standard 家族（`fetch: false`），不改动：它是模型可见
-// 的减法，去掉需要测量，而目前没有。这条断言防的是「顺手改成 true」——
-// 真要有意开启，先改这里并写下理由。
+// 的减法，去掉需要测量，而目前没有。这条断言防的是「顺手改成 true」。
 assert.match(composition, /- id: tool-web\n  name: '@deepseek-ai\/dsh-tool-web'\n  config:\n    fetch: false\n/,
   'tool-web 保持家族取值 fetch: false')
 

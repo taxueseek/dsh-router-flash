@@ -116,21 +116,26 @@
 
 # ── goals ───────────────────────────────────────────────────────────────────
 
-# The goal SERVICE and its session driver stay on the host plane (an entry-local
-# realm here would hide `goals` from them). What a preset owns is the
-# agent-facing surface: the human command and the model tool.
+# Only the model-facing tool. The goal SERVICE, its session driver, and the
+# `/goal` command stay on the host plane: the Gateway serves the goal domain as
+# Remote endpoints whose receiver comes from a generated descriptor, so it
+# resolves `goals` on the host and an entry-local realm here would hide it. The
+# registry is keyed by session anyway, so one host instance serves every
+# session. What a preset chooses is whether its agent can call the goal tool.
 #
-# `command-goal` is here because the upstream family's reason for omitting it no
-# longer holds. Its own comment reads "the `/goal` command stay[s] on the host
-# plane" — true when written, false since `dsh-web-app` took the row away
-# (`disabled: true`, "Presets own the human command and model-facing tool"): a
-# preset that omits the row simply has no `/goal`. Measured on 0.1.5-rc.2,
-# without the row `commands.list()` = [compact, feedback, permission, plan].
-# Cost is zero model context — `dsh-commands` registers no prompt section — so
-# this cannot perturb the routed first request.
-- id: command-goal
-  name: '@deepseek-ai/dsh-command-goal'
-
+# `command-goal` is deliberately NOT added, keeping the upstream family's
+# surface exactly. The row is a real capability question, so the decision is
+# recorded rather than left as a silent absence:
+#   - When this family was written (target 0.1.0-rc.6) `dsh-base` provided the
+#     row enabled, so omitting it was correct — not an oversight.
+#   - Since 0.1.2-alpha.2 `dsh-web-app` disables the host row ("Presets own the
+#     human command and model-facing tool"), so on this generation an omitted
+#     row means no `/goal`. Measured: `commands.list()` = [compact, feedback,
+#     permission, plan].
+#   - Cost either way is zero model context (`dsh-commands` registers no prompt
+#     section), so this is purely a surface choice — and the family's surface
+#     wins until a measurement says otherwise.
+# To enable `/goal`, add the row back (see README, 工具面).
 - id: tool-goal
   name: '@deepseek-ai/dsh-tool-goal'
 

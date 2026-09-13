@@ -123,14 +123,15 @@ dsh plugin --profile web remove dsh-router-flash
 - **但部署自己表态时会被绕过**（实测）：部署层写一条显式 `tool-web` 行（如 `fetch: true`），生效的是部署那条，preset 的取值不参与；只有在无人表态时，这一行才体现为「扣掉宿主默认」。所以这条限制「该管的地方管不到，不该扣的地方扣掉」——它是家族的习惯，不是安全或测量结论。
 - 本 preset 保持 `false`（跟随家族）。要开启：把该行的 `fetch` 改成 `true`，并同步改 `preset/router.test.mjs` 里那条断言。
 
-### `command-goal`：不是设计，是过时的宿主假设 → 本 preset 保留
+### `command-goal`：模型不可见，但仍跟随家族 → 不补
 
-- 家族自己的注释写着「the `/goal` command stay[s] on the host plane」——**写的时候成立，`0.1.2-alpha.2` 起不再成立**：`dsh-web-app` 把该行收走（`disabled: true`），preset 不写就没有 `/goal`。
-- 实测（`0.1.5-rc.2`）：不写该行，`commands.list()` = `[compact, feedback, permission, plan]`；写了才有 `goal`。
-- 它**不占模型上下文**：`dsh-commands` 不注册任何 prompt 段（已核源码），所以补它不可能扰动首轮请求。
-- 时间线（逐版本核过 npm 包）：`dsh-base` 任何版本都带这行且**启用**；`dsh-web-app` 从 **0.1.2-alpha.2** 起把它设为 `disabled: true`；官方 preset 在**同一版本**补上该行。三方是一次协同的所有权移交。这之前（含上游家族的目标版本 `0.1.0-rc.6` / `0.1.1-rc.2`）宿主直接提供 `/goal`，谁也不需要在 preset 里写它。
-- 所以上游家族**不是漏了、也不是不想要**：它在自己的目标宿主上是对的。只有把同一份 preset 拿到 `0.1.2-alpha.2` 之后（含本机 `0.1.5-rc.2`）跑，才出现缺口。上游 4 个 preset 都带 `tool-goal`（模型侧目标工具），缺的只是人名命令这一半。
-- 结论：这是宿主能力下放后的**迁移缺口补齐**，与 persona schema、事件 API 同类，不是能力扩张。
+这里有一个容易搞反的点，先说结论：**不补是决定，不是遗漏。**
+
+- 事实层面：`dsh-base` 任何版本都带这行且**启用**；`dsh-web-app` 从 **0.1.2-alpha.2** 起把它设为 `disabled: true`；官方 preset 在**同一版本**补上该行。这之前（含上游家族的目标版本 `0.1.0-rc.6` / `0.1.1-rc.2`）宿主直接提供 `/goal`。
+- 所以上游家族**不是漏写、也不是不想要**：它写那行注释时，宿主确实提供 `/goal`，省略是正确的。缺口只在把同一份 preset 拿到 `0.1.2-alpha.2` 之后（含本机 `0.1.5-rc.2`）跑时才出现。
+- 现状（实测 `0.1.5-rc.2`）：不写该行，`commands.list()` = `[compact, feedback, permission, plan]`，也就是**没有 `/goal`**。写了才有 `goal`。
+- 为什么还是不加：它虽然不占模型上下文（`dsh-commands` 不注册 prompt 段，已核源码，所以加它零扰动），但**加它就是偏离家族工具面**。本 preset 的定位是「补兼容、不补口味」，`/goal` 属于口味。上游 4 个 preset 一致不带这行，本 preset 也保持一致。
+- 要开启：把 `- id: command-goal` / `name: '@deepseek-ai/dsh-command-goal'` 两行加回 goals 段，并同步改 `preset/router.test.mjs` 里的对应断言（那里现在是「必须不存在」）。
 
 ### `present`：模型可见的加法 → 跟随家族，不补
 
@@ -139,9 +140,9 @@ dsh plugin --profile web remove dsh-router-flash
 
 ### 规则
 
-**模型可见的目录跟随家族（不增不减）；模型不可见的宿主能力缺口按迁移修复补齐。** 前者任何改动都需要先有测量，后者不需要。
+**工具面跟随上游家族，不增不减；只补会炸的兼容问题。** 家族明写的（`fetch: false`）、家族没写的（`present`、`command-goal`）都不动——包括那些「加了看起来更好」的项，因为「看起来更好」没有测量支撑，而这一族的全部价值来自它的测量。
 
-`preset/router.test.mjs` 把宿主交还的 23 行做成守卫清单：任何一行从组合里消失即自检失败。
+`preset/router.test.mjs` 把这条规则变成断言：宿主交还的 22 行必须齐（`command-goal` 除外，它属于上面的决定），`command-goal` 与 `present` 必须不在，`tool-web` 必须 `fetch: false`。
 
 ## 宿主所有权移交时间线（goal / present / tool-web）
 
@@ -168,7 +169,7 @@ dsh plugin --profile web remove dsh-router-flash
 | persona 行只写 `config.text` | `dsh-persona` 自 0.1.5 起要求 `prefix`，该行校验失败即整份 preset 挂载被拒（`agent-preset/invalid`） | 双写 `prefix` + `text`（schemastery 保留未声明键），0.1.2-rc.1 ~ 0.1.5-rc.2 两代都能挂 |
 | 读 `session.events` | 该属性已在 0.1.2-alpha.4 被 `eventAt()` / `snapshotEvents()` 取代，每轮提示词装配抛 TypeError | `sessionEvents()` 特性探测：`snapshotEvents()` 优先，回退 `session.events` |
 | persona 段位置 | `AssembledSection` 现在只有 `{ name, text }`，没有 `order` 可设，渲染顺序即数组顺序 | 上游「过滤后追加」会把身份句甩到全部工具说明之后（已实测），改为**原位替换** |
-| `command-goal` 缺失 | 宿主自 0.1.2-alpha.2 起不再提供该行，preset 不写就没有 `/goal` | 补上该行（不占模型上下文，见上节时间线） |
+| `/goal` 命令缺失 | 宿主自 0.1.2-alpha.2 起不再提供该行，preset 不写就没有 `/goal` | **不修**：属工具面选择（不占模型上下文，但补它偏离家族），见「工具面」一节 |
 
 `contexts: []` 保持上游原样（两个分支都清空）：放行它会往每一轮（尤其首轮）注入约 470 字符的运行时上下文快照，改动最敏感的那一轮需要有测量支撑，目前没有。想要这份可见性的部署请自行决定——那是部署的取舍，不是 preset 的。
 
