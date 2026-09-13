@@ -123,11 +123,27 @@ export function extractText(data) {
   return content.map((c) => (typeof c === 'string' ? c : (c.text ?? ''))).join(' ')
 }
 
-/** Per-session mode derived from the first user message（非 Flash 走这里）。
- *  0.1.2-alpha.4 起 `Session.events` 已被 `seq`/`eventAt()`/`snapshotEvents()`
- *  取代；这里要的是全量事件视图，故用 snapshotEvents()。 */
+/**
+ * 会话事件读取，跨宿主两代兼容。
+ *
+ * `session.events` 在 dsh 0.1.2-alpha.4 被 `seq` / `eventAt()` / `snapshotEvents()`
+ * 取代；读旧属性在新宿主上会抛 TypeError，沿 waterfall 冒泡到
+ * SystemPrompt.assemble()，整轮请求失败。这里做特性探测：有 `snapshotEvents()`
+ * 就用它，否则回退 `session.events`，同一份 preset 覆盖
+ * 0.1.2-rc.1 ~ 0.1.5-rc.2。
+ *
+ * @param session - 当前会话。
+ * @returns 会话事件的只读视图（`snapshotEvents()` 返回冻结快照）。
+ */
+export function sessionEvents(session) {
+  return typeof session.snapshotEvents === 'function'
+    ? session.snapshotEvents()
+    : session.events
+}
+
+/** Per-session mode derived from the first user message（非 Flash 走这里）。 */
 export function sessionMode(session) {
-  const events = session.snapshotEvents()
+  const events = sessionEvents(session)
   const userMsg = events.find((e) => e.type === 'user/message')
   return classifyTask(extractText(userMsg?.data))
 }

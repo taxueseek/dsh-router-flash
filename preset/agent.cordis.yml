@@ -35,16 +35,18 @@
 # The router plugin replaces the persona section on every assembly, so this row
 # is the fallback identity only (never `complete`).
 #
-# `prefix` is the key `dsh-persona` validates: it is `z.string().required()`, and
-# `text` is not in the schema — a row carrying `text` fails config validation,
-# never activates, and `agent-presets` rejects the whole preset at mount
-# (`preset "router-flash" failed to mount`). This row supplies the prompt for an
-# assembly without an agent (diagnostics) only; every real assembly gets its
-# persona text from router-bootstrap.
+# BOTH keys are written on purpose. `dsh-persona` changed its schema: through
+# 0.1.2 it required `text`; from 0.1.5 it requires `prefix` (+ optional
+# `suffix`) and rejects a row that has only `text` with
+# `$.prefix missing required value` — which fails the whole preset at mount.
+# schemastery keeps undeclared keys, so writing both validates on either
+# generation and the same preset spans 0.1.2-rc.1 … 0.1.5-rc.2.
+# Verified: `{ prefix, text }` → accepted; `{ text }` alone → rejected.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
     prefix: You are a helpful software engineer assistant.
+    text: You are a helpful software engineer assistant.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -114,17 +116,18 @@
 
 # ── goals ───────────────────────────────────────────────────────────────────
 
-# The goal SERVICE, its session driver, and the Gateway's Remote receiver stay on
-# the host plane (an entry-local realm here would hide `goals` from them). What a
-# preset owns is the agent-facing surface: the human command and the model tool.
+# The goal SERVICE and its session driver stay on the host plane (an entry-local
+# realm here would hide `goals` from them). What a preset owns is the
+# agent-facing surface: the human command and the model tool.
 #
-# Both rows are required, not optional. `dsh-web-app` disables 23 agent-facing
-# rows at the host plane — including `command-goal`, `tool-goal`, and `tool-todo`
-# — with the comment "Presets own the human command and model-facing tool", so in
-# a Web deployment an omitted row is simply ABSENT for that preset's agents.
-# Measured on 0.1.5-rc.2: a preset without the `command-goal` row yields
-# `commands.list()` = [compact, feedback, permission, plan] — no `/goal`; adding
-# the row adds `goal`. Omitting it is a real capability cut, not a no-op.
+# `command-goal` is here because the upstream family's reason for omitting it no
+# longer holds. Its own comment reads "the `/goal` command stay[s] on the host
+# plane" — true when written, false since `dsh-web-app` took the row away
+# (`disabled: true`, "Presets own the human command and model-facing tool"): a
+# preset that omits the row simply has no `/goal`. Measured on 0.1.5-rc.2,
+# without the row `commands.list()` = [compact, feedback, permission, plan].
+# Cost is zero model context — `dsh-commands` registers no prompt section — so
+# this cannot perturb the routed first request.
 - id: command-goal
   name: '@deepseek-ai/dsh-command-goal'
 
@@ -279,27 +282,26 @@
 # The `web` service, its search provider, and its fetch provider stay in the
 # host composition; only the model-facing tools are per-session.
 #
-# `fetch: true` follows the shipped `standard`/`ptc`/`cordis` presets and this
-# deployment's own host default (`dsh-base` mounts `dsh-web-fetch-http` and sets
-# `fetch: true` on its `tool-web` row). The router-standard family disables it,
-# and every copy of that family — including this preset's ancestor — inherited
-# the flag; no rationale is recorded in any of them. Restoring it is a
-# deliberate divergence: withholding a capability the deployment granted is the
-# deployment's call, not a routing preset's, and the http fetch provider is
-# anonymous and bounded by construction (public addresses only, credentials in
-# URLs rejected, same-origin redirects, byte/char/timeout caps, explicit
-# User-Agent), so there is no safety reason to subtract it here.
+# `fetch: false` follows the router-standard family (9/9 community presets carry
+# it) and is NOT changed here. Note what it is and is not:
+#   - It is a deliberate family line, not inherited drift: `dsh-web-app` has
+#     disabled the host `tool-web` row since 0.1.1-rc.2, so the family knew the
+#     row was theirs, and still wrote `fetch: false` while leaving `search` on.
+#   - It is a model-visible subtraction (the `web_fetch` schema is ~a tool
+#     description), so it needs measurement to remove — which nobody has.
+#   - It is bypassed whenever the deployment configures the row itself: measured,
+#     an explicit deployment-layer `tool-web` row with `fetch: true` wins over
+#     this one, so a deployment that wants fetching keeps it regardless. Where
+#     nobody expresses a preference, this line withholds the host default.
+# To enable it here, change `fetch` to `true` (see README, 工具面).
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:
-    fetch: true
+    fetch: false
     searchTimeoutMs: 60000
 
-# Deliverable presentation — in the shipped `standard`/`ptc`/`cordis` presets but
-# absent from every router-family copy. It is the row that lets the agent hand
-# files back as durable deliverables the Web UI renders; without it the agent can
-# still write files, but it cannot present them. `sessionProjections` and `fs`
-# come from `dsh-base`, so the row activates on any host built on it. It stays
-# out of the first-turn core sets, so it costs the routed turn nothing.
-- id: present
-  name: '@deepseek-ai/dsh-tool-present'
+# `present` (deliverable presentation) is deliberately absent, matching the
+# router-standard family. The shipped `standard`/`ptc`/`cordis` presets do carry
+# it (added to them in 0.1.5-alpha.2), so this is the family's surface, not the
+# host's; it is model-visible, so it is not added back without measurement. To
+# enable it, add the row back (see README, 工具面).

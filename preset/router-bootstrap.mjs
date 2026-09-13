@@ -11,17 +11,18 @@
  *   在 0.1.0-rc.6 上就已失效（session/event 是 session-scoped、agent 对象无 inbox、
  *   assemble 时事件尚未落盘）。故改为把深度引导静态并入 WEAK_FLASH persona
  *   （见 router-core.mjs），不依赖动态注入。
- * - 事件读取用 `session.snapshotEvents()`：`session.events` 已在 0.1.2-alpha.4
- *   被 `seq` / `eventAt()` / `snapshotEvents()` 取代，本文件此前读旧属性会抛
- *   TypeError，沿 waterfall 冒泡到 SystemPrompt.assemble()，每轮请求直接失败。
+ * - 事件读取走 `sessionEvents()` 特性探测（`snapshotEvents()` 优先，回退
+ *   `session.events`）：`session.events` 在 0.1.2-alpha.4 被
+ *   `seq` / `eventAt()` / `snapshotEvents()` 取代，直接读旧属性会抛 TypeError，
+ *   沿 waterfall 冒泡到 SystemPrompt.assemble()，每轮请求直接失败。
  * - 组件位置：`AssembledSection` 现在是 `{ name, text }`，没有 `order` 可设，
- *   渲染顺序就是 sections 数组顺序，故 persona 用「原位替换」而非追加到末尾。
- * - 运行时上下文（`contexts`）不再清空：本代 dsh 用它下发沙箱模式、工作区根和
- *   审批策略，清掉会让模型看不见权限事实。详见下方返回处的注释。
+ *   渲染顺序就是 sections 数组顺序，故 persona 用「原位替换」而非追加到末尾
+ *   （追加会把身份句甩到全部工具说明之后，实测如此）。
+ * - `contexts: []` 保持上游原样，理由见下方返回处注释。
  */
 
 import {
-  applyPersona, coreFor, personaFor, sessionMode, isFlashModel,
+  applyPersona, coreFor, personaFor, sessionEvents, sessionMode, isFlashModel,
 } from './router-core.mjs'
 
 /** Cordis plugin name used by loader diagnostics. */
@@ -48,14 +49,12 @@ export function apply(ctx, config) {
     // persona 全程不变；只有工具面在首次 tool call 后放开全目录。
     const sections = applyPersona(assembled.sections, persona)
 
-    // `contexts` 一概不动：它是本代 dsh 传递运行时事实的唯一通道——文件沙箱
-    // 模式与工作区根、审批策略都在这里下发（dsh-sandbox-policy 注册
-    // `systemPrompt.context`，agent-loop 再折叠成运行时上下文快照）。上游把
-    // `contexts` 清空是另一代宿主的"首轮最小化"选择，在这里会让模型既不知道
-    // 自己能不能写文件，也不知道审批策略，而工具说明又要求它按沙箱模式决定
-    // 是否升级权限——两者必须同时可见。
-    if (session.snapshotEvents().some((event) => event.type === 'tool/call')) {
-      return { ...assembled, sections } // promoted: full catalog
+    // `contexts: []` 是上游行为，保持不变：本 preset 的全部测量都围绕「首轮请求
+    // 要干净」——运行时上下文快照（文件沙箱模式、工作区根、审批策略）在每次请求
+    // 都会注入约 470 字符，去掉它会直接改动最敏感的那一轮。要放行它需要测量，
+    // 目前没有任何测量支持；想要这份可见性的部署应自行决定（见 README）。
+    if (sessionEvents(session).some((event) => event.type === 'tool/call')) {
+      return { ...assembled, sections, contexts: [] } // promoted: full catalog
     }
 
     // 平台 shell 只在这一轮的工具面里补齐；找不到就降级并告警，不抛错。
@@ -76,6 +75,7 @@ export function apply(ctx, config) {
     return {
       ...assembled,
       sections,
+      contexts: [],
       tools: assembled.tools.filter((tool) => core.has(tool.name)),
     }
   })

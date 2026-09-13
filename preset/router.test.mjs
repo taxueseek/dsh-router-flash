@@ -15,7 +15,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
-  applyPersona, coreFor, isFlashModel, personaFor, sessionMode,
+  applyPersona, coreFor, isFlashModel, personaFor, sessionEvents, sessionMode,
 } from './router-core.mjs'
 import { apply } from './router-bootstrap.mjs'
 
@@ -103,14 +103,14 @@ const first = await assemble({ model: 'deepseek-v4-flash' })
 assert.equal(first.tools.map((t) => t.name).join(','), 'read,write,edit,bash',
   '首轮工具面 = weak core(含 write) + 平台 shell')
 assert.ok(first.sections[0].text.startsWith('You are a helpful assistant.'))
-assert.equal(first.contexts.length, 1, '运行时上下文必须保留')
+assert.equal(first.contexts.length, 0, '首轮清空运行时上下文（上游行为，未测量不改）')
 
 const promoted = await assemble({
   model: 'deepseek-v4-flash',
   events: [{ type: 'tool/call' }],
 })
 assert.equal(promoted.tools.length, ALL_TOOLS.length, '首次 tool call 后放开全目录')
-assert.equal(promoted.contexts.length, 1, '晋级后同样保留运行时上下文')
+assert.equal(promoted.contexts.length, 0, '晋级后同样清空（上游两个分支都清）')
 
 // 非 DeepSeek Flash：走关键词分类，不套用 flash 弱 persona（'修复' 命中 spec 词表）
 assert.equal(sessionMode({ snapshotEvents: () => [] }), 'weak')
@@ -188,8 +188,16 @@ assert.deepEqual(missingRows, [],
 
 // `fetch: false` 会真的摘掉 web_fetch（宿主行已禁用时 preset 行才是归属者），
 // 且它是宿主默认授予的能力，不该由路由预设替用户关掉。
-assert.match(composition, /- id: tool-web\n  name: '@deepseek-ai\/dsh-tool-web'\n  config:\n    fetch: true\n/,
-  'tool-web 必须显式 fetch: true')
+// 工具面取值跟随 router-standard 家族（`fetch: false`），不改动：它是模型可见
+// 的减法，去掉需要测量，而目前没有。这条断言防的是「顺手改成 true」——
+// 真要有意开启，先改这里并写下理由。
+assert.match(composition, /- id: tool-web\n  name: '@deepseek-ai\/dsh-tool-web'\n  config:\n    fetch: false\n/,
+  'tool-web 保持家族取值 fetch: false')
+
+// `sessionEvents()` 必须能在两代宿主上取到事件：新版走 snapshotEvents()，
+// 旧版回退 session.events。
+assert.deepEqual(sessionEvents({ snapshotEvents: () => [{ type: 'x' }] }), [{ type: 'x' }])
+assert.deepEqual(sessionEvents({ events: [{ type: 'y' }] }), [{ type: 'y' }])
 
 assert.deepEqual(coreFor('weak'), ['read', 'write', 'edit'])
 console.log('router-flash preset: all checks passed')

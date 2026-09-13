@@ -31,7 +31,7 @@ isFlashModel(modelId) = /deepseek/i.test(modelId) && /flash/i.test(modelId)
 ## 安装
 
 ```bash
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.2.0
+dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.3.0
 ```
 
 安装后**重启 DSH**：`router-flash` preset 会被自动安装到 `~/.dsh/.agent-presets/router-flash`。
@@ -56,7 +56,7 @@ agent-presets:
 重复 `add` 并指定最新 tag，**不要使用 update 选择 Git 引用**：
 
 ```bash
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.2.0
+dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.3.0
 ```
 
 重启 DSH 后，包内变更的 preset 文件会自动覆盖到 `~/.dsh/.agent-presets/router-flash`。
@@ -101,74 +101,59 @@ dsh plugin --profile web remove dsh-router-flash
 - 任意渠道的 DeepSeek V4 Flash 模型（id 含 `deepseek` + `flash`）
 - 已验证渠道：`opencode-go`（`https://opencode.ai/zen/go/v1`）、`tokenrhythm`（`https://tokenrhythm.studio/v1`）。两者共用同一套 preset，唯一差异是 `agent-default-model` 里的 `provider` 取值。
 
-## 工具面：宿主把 agent 面交给 preset，少写一行就是裁能力
+## 工具面：限制的性质有两种，本 preset 分别处理
 
-先把机制说清楚，否则「限制」二字会被误读。
+`dsh-web-app`（Web 宿主 bundle）在宿主层把 **23 个 agent 面行设为 `disabled: true`**，注释写明 **「Presets own the human command and model-facing tool」**，涵盖 `tool-web` / `command-goal` / `tool-goal` / `tool-bash` … 等模型与命令入口。**所以在 Web 部署里，preset 少写一行 = 该能力对该 preset 的 agent 直接不存在。**
 
-`dsh-web-app`（Web 宿主 bundle）在宿主层把 **23 个 agent 面行设为 `disabled: true`**，注释写明 **「Presets own the human command and model-facing tool」**：
+上游与同类插件在这块**一致地做了限制**：
 
-```
-tool-bash  tool-pwsh  tool-jobs  tool-fs  tool-fs-search  skill-filesystem
-tool-skill  command-goal  tool-goal  plan-mode  compaction-basic  command-compact
-tool-result-pruner  tool-subagent-control  tool-subagent-list-agents  tool-subagent
-tool-subagent-fork  workflow-worker-thread  tool-workflow  tool-ralph
-agent-instructions  tool-todo  tool-web
-```
+| 行 | godmode / router-standard 一系 | 锚定系（apex / anchored-flash / liangshen / anchored-standard） | dsh 内置 minimal / ptc / standard / cordis |
+|---|---|---|---|
+| `tool-web` → `web_fetch` | `fetch: false`（6/6） | `fetch: false`（4/4） | `fetch: true` |
+| `command-goal`（`/goal`） | 缺失（6/6） | 缺失（4/4） | 有 |
+| `present`（交付物呈现） | 缺失（6/6） | 缺失（4/4） | 有（0.1.5-alpha.2 起） |
 
-**所以在 Web 部署里，preset 少写一行 = 该能力对该 preset 的 agent 直接不存在。** 这不是继承宿主默认值，是拿掉。（相反，写 `fetch: false` 是显式关掉；两者都真生效，实测如下表。）
+但这两条限制的**性质不同**，处理方式因此不同。
 
-### 限制与实测对照
+### `web_fetch`：模型可见的减法 → 跟随家族，保持 `false`
 
-| 行 | godmode / router-standard 一系 | 锚定系（apex / anchored-flash / liangshen） | dsh 内置 minimal / ptc / standard / cordis | 本 preset |
-|---|---|---|---|---|
-| `tool-web` → `web_fetch` | `fetch: false`（6 个全部） | `fetch: false`（3 个全部） | `fetch: true` | **`true`** |
-| `present`（交付物呈现） | 缺失（全部） | 缺失（全部） | 有 | **补上** |
-| `command-goal`（`/goal`） | 缺失（全部） | 缺失（全部） | 有 | **补上** |
+- 这是家族**刻意**写的行，不是抄漏：`dsh-web-app` 自 `0.1.1-rc.2` 起就禁用了宿主 `tool-web` 行，家族知道这行归 preset，仍写 `fetch: false` 而把 `search` 留着。
+- 它是**模型可见**的减法（`web_fetch` 的 schema 进模型目录），去掉它需要测量，而 9 个 preset 的文档里对这条一个字都没解释，也没有任何测量。
+- 它是**真关掉**：`dsh-tool-web` 的 `apply()` 末尾是 `if (resolved.fetch) applyWebFetchTool(...)`，条件不成立就完全不注册。
+- **但部署自己表态时会被绕过**（实测）：部署层写一条显式 `tool-web` 行（如 `fetch: true`），生效的是部署那条，preset 的取值不参与；只有在无人表态时，这一行才体现为「扣掉宿主默认」。所以这条限制「该管的地方管不到，不该扣的地方扣掉」——它是家族的习惯，不是安全或测量结论。
+- 本 preset 保持 `false`（跟随家族）。要开启：把该行的 `fetch` 改成 `true`，并同步改 `preset/router.test.mjs` 里那条断言。
 
-宿主行按 Web 方式禁用后的实测结果（`0.1.5-rc.2`，隔离 profile）：
+### `command-goal`：不是设计，是过时的宿主假设 → 本 preset 保留
 
-| preset 里的 `tool-web` 行 | `web_search` | `web_fetch` |
-|---|---|---|
-| 整行不写 | 无 | 无 |
-| `fetch: false` | 有 | **无** |
-| `fetch: true` | 有 | 有 |
+- 家族自己的注释写着「the `/goal` command stay[s] on the host plane」——**写的时候成立，`0.1.2-alpha.2` 起不再成立**：`dsh-web-app` 把该行收走（`disabled: true`），preset 不写就没有 `/goal`。
+- 实测（`0.1.5-rc.2`）：不写该行，`commands.list()` = `[compact, feedback, permission, plan]`；写了才有 `goal`。
+- 它**不占模型上下文**：`dsh-commands` 不注册任何 prompt 段（已核源码），所以补它不可能扰动首轮请求。
+- 结论：这是与 persona schema、事件 API 同一类的**宿主迁移修复**，不是能力扩张。内置三个 preset 一直都带这行。
 
-| preset 里的 `command-goal` 行 | 该 agent 的可用命令 |
-|---|---|
-| 不写 | `compact, feedback, permission, plan` |
-| 写 | `compact, feedback, goal, permission, plan` |
+### `present`：模型可见的加法 → 跟随家族，不补
 
-**两条结论**：
+- 它进了官方 preset，但**只从 `0.1.5-alpha.2` 起**——社区家族写于更早，属于「没赶上」而非「不想要」。
+- 即便如此，它仍是**模型可见**的一项（描述约 464 字符），补进去等于改动家族测过的目录。按同一条规则（模型可见的改动需要测量）不补。要开启：把该行加回 `agent.cordis.yml`（`- id: present` / `name: '@deepseek-ai/dsh-tool-present'`）。
 
-1. `fetch: false` 是真的关掉，不是「保留但受限」——`dsh-tool-web` 的 `apply()` 末尾是 `if (resolved.fetch) applyWebFetchTool(...)`，条件不成立就完全不注册。
-2. 少了 `command-goal` 行，`/goal` 就没了。上游路由系与锚定系 9 个 preset **全部**缺这一行，也就全部没有 `/goal`；本 preset v0.2.0 一度沿用，现已补上。
+### 规则
 
-### 为什么恢复 web_fetch
+**模型可见的目录跟随家族（不增不减）；模型不可见的宿主能力缺口按迁移修复补齐。** 前者任何改动都需要先有测量，后者不需要。
 
-抓取能力归部署决定、归渠道决定，不该由路由预设替用户关掉：`dsh-base` 默认就挂 `dsh-web-fetch-http`，部署自己的 patch 层把它当作开关。安全侧也没有削减理由：http fetch provider 匿名（不发凭证）、拒绝 URL 内嵌凭证、只解析公网地址、连接锁定已校验地址、重定向不跨源、字节/字符/超时全有上限、带显式 User-Agent（见其 README）。
+`preset/router.test.mjs` 把宿主交还的 23 行做成守卫清单：任何一行从组合里消失即自检失败。
 
-上游为什么关，**查不到理由**：路由系与锚定系 9 个 preset 文档里对这两行一个字都没解释，属两派共同的无因继承。
+## 版本适配
 
-### 为什么补 present 与 command-goal
-
-- `present`：内置三个 preset 都有、router 一系全没有。它把 agent 产出的文件登记成交付物给 Web UI 渲染；缺了它 agent 照样能写文件，但交不到用户手上。依赖的 `fs` 与 `sessionProjections` 由 `dsh-base` 提供，且不在首轮核心工具面内，对路由那一轮零成本。
-- `command-goal`：见上表。它不占模型上下文（人名命令，不是工具 schema），只恢复宿主本来授予的 `/goal`。
-
-`preset/router.test.mjs` 现在把上面 23 行作为守卫清单：任何一行从组合里消失都会让自检失败。
-
-## 版本适配（v0.1.1，v0.2.0 沿用）
-
-上游 v0.1.0 只适配到 dsh `0.1.0-rc.6`。在 `0.1.5-rc.2` 上它会**装得上、用不了**，三处必须修的偏差：
+上游 v0.1.0 只适配到 dsh `0.1.0-rc.6`。在 `0.1.5-rc.2` 上它会**装得上、用不了**。适配策略是**只修兼容、不动行为**：
 
 | 偏差 | 症状 | 修法 |
 |---|---|---|
-| persona 行用 `config.text` | 该行 config 校验失败（`dsh-persona` 的 `prefix` 是必填），整份 preset 挂载被拒，会话报 `agent-preset/invalid` | 改用 `prefix` |
-| 读 `session.events` | 该属性已在 0.1.2-alpha.4 被 `eventAt()` / `snapshotEvents()` 取代，每轮提示词装配抛 TypeError | 改用 `session.snapshotEvents()` |
-| 清空 `contexts` | 运行时上下文快照被抹掉，模型看不到文件沙箱模式、工作区根和审批策略，而工具说明要求它据此决定是否升级权限 | 保留 `contexts` |
+| persona 行只写 `config.text` | `dsh-persona` 自 0.1.5 起要求 `prefix`，该行校验失败即整份 preset 挂载被拒（`agent-preset/invalid`） | 双写 `prefix` + `text`（schemastery 保留未声明键），0.1.2-rc.1 ~ 0.1.5-rc.2 两代都能挂 |
+| 读 `session.events` | 该属性已在 0.1.2-alpha.4 被 `eventAt()` / `snapshotEvents()` 取代，每轮提示词装配抛 TypeError | `sessionEvents()` 特性探测：`snapshotEvents()` 优先，回退 `session.events` |
+| persona 段位置 | `AssembledSection` 现在只有 `{ name, text }`，没有 `order` 可设，渲染顺序即数组顺序 | 上游「过滤后追加」会把身份句甩到全部工具说明之后（已实测），改为**原位替换** |
 
-另外 `AssembledSection` 现在只有 `{ name, text }`，没有 `order` 可设，渲染顺序即数组顺序；上游把 persona 段追加到末尾会把身份句排到全部工具说明之后，已改为**原位替换**。
+`contexts: []` 保持上游原样（两个分支都清空）：放行它会往每一轮（尤其首轮）注入约 470 字符的运行时上下文快照，改动最敏感的那一轮需要有测量支撑，目前没有。想要这份可见性的部署请自行决定——那是部署的取舍，不是 preset 的。
 
-## 运行时健壮性（v0.2.0）
+## 运行时健壮性
 
 - **preset 改为同步发布**：此前靠 `apply()` 返回 promise 让组合层等待，实测该等待覆盖不到写入——冷启动时名册已扫到目录、组合文件还在 `.tmpdir` 里，整份 preset 报 "the composition file agent.cordis.yml is missing"，会话挂不出来。现在 `apply()` 同步写完再返回，并把 `agent.cordis.yml`（发现逻辑的判定标记）**最后**发布，任何观察者要么看到旧版本、要么看到完整的一套。
 - **半成品目录自愈**：目录里只剩 `preset.yml` 的残缺状态，下次启动会被补齐并正常挂载（已实测）。
