@@ -31,7 +31,7 @@ isFlashModel(modelId) = /deepseek/i.test(modelId) && /flash/i.test(modelId)
 ## 安装
 
 ```bash
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.3.0
+dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.3.1
 ```
 
 安装后**重启 DSH**：`router-flash` preset 会被自动安装到 `~/.dsh/.agent-presets/router-flash`。
@@ -56,7 +56,7 @@ agent-presets:
 重复 `add` 并指定最新 tag，**不要使用 update 选择 Git 引用**：
 
 ```bash
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.3.0
+dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.3.1
 ```
 
 重启 DSH 后，包内变更的 preset 文件会自动覆盖到 `~/.dsh/.agent-presets/router-flash`。
