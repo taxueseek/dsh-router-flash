@@ -71,12 +71,23 @@ export function bandOf(mode) {
   return 'react'
 }
 
-/** Persona for a mode; weak picks the model-specific internal-routing text. */
-export function personaFor(mode, modelId) {
+/** Persona for a mode; weak picks the model-specific internal-routing text.
+ *
+ * `flashGuidance: false` 把 Flash 的弱 persona 降为纯中性句，用来做对照实验。
+ * 依据是 apex-standard 记录的 P21：在**连续相关的任务链**上，这套静态引导实测
+ * 为负收益（46-63% vs 63% 基线），该 preset 为此提供了同一个开关。
+ *
+ * 关闭时**不能**退回 SPEC_PERSONA：P11 实测「spec 句 persona 对 Flash 是反向
+ * 路由」，那会从「没引导」变成「反向引导」。所以退回的是无分类指令、无锚点的
+ * 中性句，也就是引导缺省状态本身。
+ */
+export function personaFor(mode, modelId, { flashGuidance = true } = {}) {
   switch (bandOf(mode)) {
     case 'spec': return SPEC_PERSONA
     case 'transition': return MIXED_PERSONA
-    case 'weak': return isFlashModel(modelId) ? WEAK_FLASH : WEAK_PRO
+    case 'weak':
+      if (!isFlashModel(modelId)) return WEAK_PRO
+      return flashGuidance ? WEAK_FLASH : FLASH_NEUTRAL
     default: return REACT_PERSONA
   }
 }

@@ -101,22 +101,60 @@ dsh plugin --profile web remove dsh-router-flash
 - 任意渠道的 DeepSeek V4 Flash 模型（id 含 `deepseek` + `flash`）
 - 已验证渠道：`opencode-go`（`https://opencode.ai/zen/go/v1`）、`tokenrhythm`（`https://tokenrhythm.studio/v1`）。两者共用同一套 preset，唯一差异是 `agent-default-model` 里的 `provider` 取值。
 
-## 工具面：与内置 standard preset 对齐
+## 工具面：宿主把 agent 面交给 preset，少写一行就是裁能力
 
-本 preset 从 dsh-router-standard 一系继承了两处**削减**，v0.2.0 已按证据恢复：
+先把机制说清楚，否则「限制」二字会被误读。
 
-| 行 | godmode / router-standard 一系 | dsh 内置 minimal / ptc / standard / cordis | 本 preset 取值 |
-|---|---|---|---|
-| `tool-web` → `web_fetch` | `fetch: false`（不注册该工具） | `fetch: true` | **`true`** |
-| `present`（交付物呈现） | 整行缺失 | 有 | **补上** |
-| `command-goal`（`/goal` 斜杠命令） | 缺失 | 有 | 不补（理由见下） |
+`dsh-web-app`（Web 宿主 bundle）在宿主层把 **23 个 agent 面行设为 `disabled: true`**，注释写明 **「Presets own the human command and model-facing tool」**：
 
-**为什么恢复 `web_fetch`**：这是渠道无关的判定，不是口味问题。宿主的 `dsh-base` 默认就挂 `dsh-web-fetch-http` 并设 `fetch: true`；本机 web profile 的 `cordis.patch.yml` 更把 `fetch` 当作 toggle 覆写（注释写着「按需开启 / 关闭」）。也就是说**抓取能力归部署决定，归渠道决定——唯独不该由路由预设替用户关掉**。核过 `dsh-tool-web` 源码：`fetch: false` 时 `applyWebFetchTool` 整个不执行（`apply()` 末尾的 `if (resolved.fetch) applyWebFetchTool(...)`），`web_fetch` 彻底从工具目录消失，而不是保留但受限。安全侧没有理由削减：http fetch provider 匿名（不发凭证）、拒绝 URL 内嵌凭证、只解析公网地址、连接锁定已校验地址、重定向不跨源、字节/字符/超时全有上限、带显式 User-Agent（见其 README）。
-上游为什么关，**查不到理由**：godmode 与 router-standard 三个 preset 全写着 `fetch: false`，两边的 README / CHANGELOG / docs 一个字都没解释，属无因继承。
+```
+tool-bash  tool-pwsh  tool-jobs  tool-fs  tool-fs-search  skill-filesystem
+tool-skill  command-goal  tool-goal  plan-mode  compaction-basic  command-compact
+tool-result-pruner  tool-subagent-control  tool-subagent-list-agents  tool-subagent
+tool-subagent-fork  workflow-worker-thread  tool-workflow  tool-ralph
+agent-instructions  tool-todo  tool-web
+```
 
-**为什么补 `present`**：内置三个 preset 都有、router 一系全没有。它负责把 agent 产出的文件登记成交付物给 Web UI 渲染。没有它 agent 照样能写文件，但**没法把文件交到用户手上**。它依赖的 `fs` 与 `sessionProjections` 都由 `dsh-base` 提供，且不在首轮核心工具面里，对路由那一轮零成本。
+**所以在 Web 部署里，preset 少写一行 = 该能力对该 preset 的 agent 直接不存在。** 这不是继承宿主默认值，是拿掉。（相反，写 `fetch: false` 是显式关掉；两者都真生效，实测如下表。）
 
-**为什么不补 `command-goal`**：本机 web profile 已经在宿主组合里挂了这一行（来自 `dsh-web-app`）。preset 再挂会向同一个命令表注册同名命令，靠 cordis 的「后注册的遮蔽先注册的」生效——这是重复注册，不是新能力。纯 headless 宿主里它确实缺失，但那一层属于宿主组装的决定（`dsh-web-app` 管），不该由路由预设代管。
+### 限制与实测对照
+
+| 行 | godmode / router-standard 一系 | 锚定系（apex / anchored-flash / liangshen） | dsh 内置 minimal / ptc / standard / cordis | 本 preset |
+|---|---|---|---|---|
+| `tool-web` → `web_fetch` | `fetch: false`（6 个全部） | `fetch: false`（3 个全部） | `fetch: true` | **`true`** |
+| `present`（交付物呈现） | 缺失（全部） | 缺失（全部） | 有 | **补上** |
+| `command-goal`（`/goal`） | 缺失（全部） | 缺失（全部） | 有 | **补上** |
+
+宿主行按 Web 方式禁用后的实测结果（`0.1.5-rc.2`，隔离 profile）：
+
+| preset 里的 `tool-web` 行 | `web_search` | `web_fetch` |
+|---|---|---|
+| 整行不写 | 无 | 无 |
+| `fetch: false` | 有 | **无** |
+| `fetch: true` | 有 | 有 |
+
+| preset 里的 `command-goal` 行 | 该 agent 的可用命令 |
+|---|---|
+| 不写 | `compact, feedback, permission, plan` |
+| 写 | `compact, feedback, goal, permission, plan` |
+
+**两条结论**：
+
+1. `fetch: false` 是真的关掉，不是「保留但受限」——`dsh-tool-web` 的 `apply()` 末尾是 `if (resolved.fetch) applyWebFetchTool(...)`，条件不成立就完全不注册。
+2. 少了 `command-goal` 行，`/goal` 就没了。上游路由系与锚定系 9 个 preset **全部**缺这一行，也就全部没有 `/goal`；本 preset v0.2.0 一度沿用，现已补上。
+
+### 为什么恢复 web_fetch
+
+抓取能力归部署决定、归渠道决定，不该由路由预设替用户关掉：`dsh-base` 默认就挂 `dsh-web-fetch-http`，部署自己的 patch 层把它当作开关。安全侧也没有削减理由：http fetch provider 匿名（不发凭证）、拒绝 URL 内嵌凭证、只解析公网地址、连接锁定已校验地址、重定向不跨源、字节/字符/超时全有上限、带显式 User-Agent（见其 README）。
+
+上游为什么关，**查不到理由**：路由系与锚定系 9 个 preset 文档里对这两行一个字都没解释，属两派共同的无因继承。
+
+### 为什么补 present 与 command-goal
+
+- `present`：内置三个 preset 都有、router 一系全没有。它把 agent 产出的文件登记成交付物给 Web UI 渲染；缺了它 agent 照样能写文件，但交不到用户手上。依赖的 `fs` 与 `sessionProjections` 由 `dsh-base` 提供，且不在首轮核心工具面内，对路由那一轮零成本。
+- `command-goal`：见上表。它不占模型上下文（人名命令，不是工具 schema），只恢复宿主本来授予的 `/goal`。
+
+`preset/router.test.mjs` 现在把上面 23 行作为守卫清单：任何一行从组合里消失都会让自检失败。
 
 ## 版本适配（v0.1.1，v0.2.0 沿用）
 

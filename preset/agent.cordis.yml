@@ -114,12 +114,20 @@
 
 # ── goals ───────────────────────────────────────────────────────────────────
 
-# Only the model-facing tool. The goal SERVICE, its session driver, and the
-# `/goal` command stay on the host plane: the Gateway serves the goal domain as
-# Remote endpoints whose receiver comes from a generated descriptor, so it
-# resolves `goals` on the host and an entry-local realm here would hide it. The
-# registry is keyed by session anyway, so one host instance serves every
-# session. What a preset chooses is whether its agent can call the goal tool.
+# The goal SERVICE, its session driver, and the Gateway's Remote receiver stay on
+# the host plane (an entry-local realm here would hide `goals` from them). What a
+# preset owns is the agent-facing surface: the human command and the model tool.
+#
+# Both rows are required, not optional. `dsh-web-app` disables 23 agent-facing
+# rows at the host plane — including `command-goal`, `tool-goal`, and `tool-todo`
+# — with the comment "Presets own the human command and model-facing tool", so in
+# a Web deployment an omitted row is simply ABSENT for that preset's agents.
+# Measured on 0.1.5-rc.2: a preset without the `command-goal` row yields
+# `commands.list()` = [compact, feedback, permission, plan] — no `/goal`; adding
+# the row adds `goal`. Omitting it is a real capability cut, not a no-op.
+- id: command-goal
+  name: '@deepseek-ai/dsh-command-goal'
+
 - id: tool-goal
   name: '@deepseek-ai/dsh-tool-goal'
 

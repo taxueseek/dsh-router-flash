@@ -8,9 +8,12 @@
  *   4. 运行时上下文不被清空；
  *   5. 非 DeepSeek Flash 模型走首条 user/message 的关键词分类；
  *   6. `session.events` 已不存在时不再被读取（读旧属性会抛 TypeError）；
- *   7. 工具目录里没有 shell 时降级告警，而不是让整轮装配失败。
+ *   7. 工具目录里没有 shell 时降级告警，而不是让整轮装配失败；
+ *   8. 组合覆盖宿主交还给 preset 的每一行（防止「没写一行」变成静默裁能力）。
  */
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   applyPersona, coreFor, isFlashModel, personaFor, sessionMode,
 } from './router-core.mjs'
@@ -161,6 +164,32 @@ assert.equal(shellless.tools.map((t) => t.name).join(','), 'read,write,edit',
   '缺 shell 时首轮只剩文件工具')
 assert.equal(warnings.length, 1, '降级必须留下告警')
 assert.ok(/bash\/pwsh/.test(warnings[0]))
+
+// --- 8. 组合必须覆盖宿主交还给 preset 的行 ----------------------------------
+// `dsh-web-app` 在宿主层把这 23 行设为 disabled，把 agent 面交给 preset；
+// 在 Web 部署里，preset 少写一行 = 该能力对它的 agent 直接不存在。实测：
+// 少了 command-goal 行，commands.list() 就没有 goal。
+// 清单来自 dsh-web-app/cordis.patch.yml 的 `disabled: true` 行（0.1.5-rc.2），
+// 内联在此以免自检依赖某个具体安装路径。
+const HOST_DELEGATED_ROWS = [
+  'tool-bash', 'tool-pwsh', 'tool-jobs', 'tool-fs', 'tool-fs-search',
+  'skill-filesystem', 'tool-skill', 'command-goal', 'tool-goal', 'plan-mode',
+  'compaction-basic', 'command-compact', 'tool-result-pruner',
+  'tool-subagent-control', 'tool-subagent-list-agents', 'tool-subagent',
+  'tool-subagent-fork', 'workflow-worker-thread', 'tool-workflow', 'tool-ralph',
+  'agent-instructions', 'tool-todo', 'tool-web',
+]
+const composition = readFileSync(
+  fileURLToPath(new URL('./agent.cordis.yml', import.meta.url)), 'utf8',
+)
+const missingRows = HOST_DELEGATED_ROWS.filter((id) => !composition.includes(`- id: ${id}\n`))
+assert.deepEqual(missingRows, [],
+  `宿主已把下列行交给 preset，组合里不能缺：${missingRows.join(', ')}`)
+
+// `fetch: false` 会真的摘掉 web_fetch（宿主行已禁用时 preset 行才是归属者），
+// 且它是宿主默认授予的能力，不该由路由预设替用户关掉。
+assert.match(composition, /- id: tool-web\n  name: '@deepseek-ai\/dsh-tool-web'\n  config:\n    fetch: true\n/,
+  'tool-web 必须显式 fetch: true')
 
 assert.deepEqual(coreFor('weak'), ['read', 'write', 'edit'])
 console.log('router-flash preset: all checks passed')
