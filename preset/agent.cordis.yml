@@ -268,10 +268,30 @@
   config:
     allowParallelInProgress: true
 
-# The `web` service and its search provider stay in the host composition; only
-# the model-facing tool is per-session.
+# The `web` service, its search provider, and its fetch provider stay in the
+# host composition; only the model-facing tools are per-session.
+#
+# `fetch: true` follows the shipped `standard`/`ptc`/`cordis` presets and this
+# deployment's own host default (`dsh-base` mounts `dsh-web-fetch-http` and sets
+# `fetch: true` on its `tool-web` row). The router-standard family disables it,
+# and every copy of that family — including this preset's ancestor — inherited
+# the flag; no rationale is recorded in any of them. Restoring it is a
+# deliberate divergence: withholding a capability the deployment granted is the
+# deployment's call, not a routing preset's, and the http fetch provider is
+# anonymous and bounded by construction (public addresses only, credentials in
+# URLs rejected, same-origin redirects, byte/char/timeout caps, explicit
+# User-Agent), so there is no safety reason to subtract it here.
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:
-    fetch: false
+    fetch: true
     searchTimeoutMs: 60000
+
+# Deliverable presentation — in the shipped `standard`/`ptc`/`cordis` presets but
+# absent from every router-family copy. It is the row that lets the agent hand
+# files back as durable deliverables the Web UI renders; without it the agent can
+# still write files, but it cannot present them. `sessionProjections` and `fs`
+# come from `dsh-base`, so the row activates on any host built on it. It stays
+# out of the first-turn core sets, so it costs the routed turn nothing.
+- id: present
+  name: '@deepseek-ai/dsh-tool-present'

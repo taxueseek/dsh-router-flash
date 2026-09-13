@@ -1,3 +1,3 @@
-name: Router Flash (opencode-go)
-description: Flash 专属路由——按任务类型（build/fix）内部路由，neutral persona + 分类引导 + 回顾锚 + 反跑题锚（作者 w7 方案，适配 opencode-go）
+name: Router Flash (DeepSeek V4 Flash)
+description: DeepSeek V4 Flash 专属路由——命中模型 id 即生效（含 deepseek 与 flash 两个词，不分渠道）；按任务类型（build/fix）内部路由，neutral persona + 分类引导 + 回顾锚 + 反跑题锚（作者 w7 方案）
 order: 4

@@ -42,9 +42,20 @@ const WEAK_FLASH =
   + 'Before acting, briefly review what you have already done in this session and continue from where you left off; do not repeat completed steps. Do not run environment checks (echo, whoami, uname, node --version, date) or exhaustive grep/glob scans.\n'
   + 'Think deeply about the architecture, edge cases, and integration points before writing. Do not spend reasoning on the environment or tooling. Produce when your information is complete, and end each reasoning block with a decision or an information need.'
 
-/** True when the routed model id is a Flash-family model. */
+/** True when the routed model id names a DeepSeek Flash-family model.
+ *
+ * 判据是「渠道无关的模型身份」，不是渠道本身：`deepseek` 与 `flash` 两个词都出现
+ * 才算命中（`deepseek-v4-flash`、`deepseek-v4-flash-0731`、
+ * `deepseek-v4-flash-vision-exp`、`DeepSeek-V4-Flash` 都算）。
+ *
+ * 只匹配 `flash` 会把别的家族一起卷进来——`gemini-2.5-flash`、`qwen3-flash`、
+ * `gpt-5-flash` 都不是 DeepSeek Flash，套上本 preset 的弱 persona 只会让它们变差。
+ * 未命中的模型不走 Flash 分支，改走首条用户消息的关键词分类，仍可用。
+ *
+ * 若某个渠道给同一模型起了不含这两个词的名字，本函数返回 false，路由退回关键词
+ * 分类——是预期降级，不是故障。 */
 export function isFlashModel(modelId) {
-  return typeof modelId === 'string' && /flash/i.test(modelId)
+  return typeof modelId === 'string' && /deepseek/i.test(modelId) && /flash/i.test(modelId)
 }
 
 export function clamp01(v) {
