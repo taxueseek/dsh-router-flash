@@ -13,7 +13,7 @@
 ## 安装
 
 ```bash
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.1.0
+dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.1.1
 ```
 
 安装后**重启 DSH**：`router-flash` preset 会被自动安装到 `~/.dsh/.agent-presets/router-flash`。
@@ -36,7 +36,7 @@ agent-presets:
 重复 `add` 并指定最新 tag，**不要使用 update 选择 Git 引用**：
 
 ```bash
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.1.0
+dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.1.1
 ```
 
 重启 DSH 后，包内变更的 preset 文件会自动覆盖到 `~/.dsh/.agent-presets/router-flash`。
@@ -77,18 +77,39 @@ dsh plugin --profile web remove dsh-router-flash
 
 ## 依赖
 
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）rc.6+
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）**0.1.5-rc.2 及以上**（本 preset 在 0.1.5-rc.2 上实测通过；0.1.2-alpha.4 之前的事件 API 已不兼容）
 - opencode-go provider 的 `deepseek-v4-flash` 模型（`https://opencode.ai/zen/go/v1`）
 
-## 适配了什么（与原版 dsh-router-standard 的区别）
+## 版本适配（v0.1.1）
 
-原版依赖三个在你的 dsh 版本上会失效的机制，本 preset 已修复：
+上游 v0.1.0 只适配到 dsh `0.1.0-rc.6`。在 `0.1.5-rc.2` 上它会**装得上、用不了**，三处必须修的偏差：
 
-1. `ctx.on('session/event')` 注入 —— dsh rc.6 中 session/event 是 session-scoped，agent-plane preset 收不到。
+| 偏差 | 症状 | 修法 |
+|---|---|---|
+| persona 行用 `config.text` | 该行 config 校验失败（`dsh-persona` 的 `prefix` 是必填），整份 preset 挂载被拒，会话报 `agent-preset/invalid` | 改用 `prefix` |
+| 读 `session.events` | 该属性已在 0.1.2-alpha.4 被 `eventAt()` / `snapshotEvents()` 取代，每轮提示词装配抛 TypeError | 改用 `session.snapshotEvents()` |
+| 清空 `contexts` | 运行时上下文快照被抹掉，模型看不到文件沙箱模式、工作区根和审批策略，而工具说明要求它据此决定是否升级权限 | 保留 `contexts` |
+
+另外 `AssembledSection` 现在只有 `{ name, text }`，没有 `order` 可设，渲染顺序即数组顺序；上游把 persona 段追加到末尾会把身份句排到全部工具说明之后，已改为**原位替换**。
+
+## 适配了什么（相对上游 v0.1.0）
+
+上游依赖三个在 0.1.0-rc.6 上就已失效的机制，本 preset 沿用其修法并补上 0.1.5 的适配：
+
+1. `ctx.on('session/event')` 注入 —— session/event 是 session-scoped，agent-plane preset 收不到。
 2. `target.inbox.append` —— agent 对象没有 `.inbox` 属性。
-3. assemble 时 `session.events` 里还没有 user/message —— 时序问题。
+3. assemble 时事件里还没有 user/message —— 时序问题。
 
-**修复方式**：把引导静态合并进 `WEAK_FLASH` persona，避免依赖任何动态注入机制。对固定任务同样有效，且更简单可靠。
+**修复方式**：把引导静态合并进 `WEAK_FLASH` persona，不依赖任何动态注入机制。
+
+## 自检
+
+```bash
+node preset/router.test.mjs
+```
+
+覆盖纯逻辑分支：Flash 识别、persona 原位替换与去重、首轮工具面（core + 平台 shell）、首次 `tool/call` 后放开全目录、运行时上下文保留、非 Flash 的关键词分类，以及「不再读取 `session.events`」。
+
 
 ## 适用范围
 
@@ -105,17 +126,19 @@ dsh-router-flash/
 ├── lib/
 │   ├── index.js      # host 端：启动时同步安装 preset 到 ~/.dsh/.agent-presets
 │   └── client.js     # client 端：空实现占位（无浏览器 UI）
-└── preset/           # router-flash agent preset 本体
-    ├── preset.yml
-    ├── agent.cordis.yml
-    ├── router-bootstrap.mjs
-    └── router-core.mjs
+├── preset/           # router-flash agent preset 本体
+│   ├── preset.yml
+│   ├── agent.cordis.yml
+│   ├── router-bootstrap.mjs
+│   ├── router-core.mjs
+│   └── router.test.mjs   # 纯逻辑自检（node preset/router.test.mjs）
 ```
 
 ## 说明
 
 - host 插件依赖宿主服务：`fs` / `sandboxPolicy`；写 `~/.dsh/.agent-presets` 使用 `danger-full-access` 策略
 - preset 同步为幂等内容比对：无变化不写入；升级时包内变更文件覆盖目标；不删除目标目录中包内没有的文件
+- 同步在 `apply()` 返回的 promise 上完成，组合层会等它，因此首个会话创建前 preset 已就位（本机 5/5 冷启动实测）
 - 卸载 bundle 不会自动删除已安装的 preset 文件，避免误删用户修改
 
 ## 致谢与来源

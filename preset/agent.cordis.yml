@@ -32,12 +32,19 @@
 
 # ── identity ────────────────────────────────────────────────────────────────
 
-# The router plugin replaces `sections` and clears `contexts` on the first
-# assembly, so this row is the fallback persona only (never `complete`).
+# The router plugin replaces the persona section on every assembly, so this row
+# is the fallback identity only (never `complete`).
+#
+# `prefix` is the key `dsh-persona` validates: it is `z.string().required()`, and
+# `text` is not in the schema — a row carrying `text` fails config validation,
+# never activates, and `agent-presets` rejects the whole preset at mount
+# (`preset "router-flash" failed to mount`). This row supplies the prompt for an
+# assembly without an agent (diagnostics) only; every real assembly gets its
+# persona text from router-bootstrap.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    text: You are a helpful software engineer assistant.
+    prefix: You are a helpful software engineer assistant.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'

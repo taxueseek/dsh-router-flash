@@ -101,17 +101,34 @@ export function extractText(data) {
   return content.map((c) => (typeof c === 'string' ? c : (c.text ?? ''))).join(' ')
 }
 
-/** Per-session mode derived from the first user message（非 Flash 走这里）。 */
+/** Per-session mode derived from the first user message（非 Flash 走这里）。
+ *  0.1.2-alpha.4 起 `Session.events` 已被 `seq`/`eventAt()`/`snapshotEvents()`
+ *  取代；这里要的是全量事件视图，故用 snapshotEvents()。 */
 export function sessionMode(session) {
-  const events = session.events
+  const events = session.snapshotEvents()
   const userMsg = events.find((e) => e.type === 'user/message')
   return classifyTask(extractText(userMsg?.data))
 }
 
-/** Replace only the persona section, keeping everything else（plan-mode 等）。 */
+/** Replace only the persona section, keeping everything else（plan-mode 等）。
+ *
+ * 原位替换，不追加到末尾：`AssembledSection` 现在是 `{ name, text }`，没有
+ * `order` 字段可设，`renderPrompt()` 直接按 sections 数组顺序拼接，所以只有
+ * 替换 persona 原本所在的位置（部署 persona prefix，order 0）才能让身份句
+ * 仍居 prompt 之首；追加会把它排到全部工具说明之后。
+ * 部署 persona 有 prefix/suffix 两段，这里只保留第一段，避免重复段落。 */
 export function applyPersona(sections, personaText) {
-  const rest = (sections || []).filter(
-    (section) => section.name !== 'persona' && !/persona/i.test(section.name),
-  )
-  return [...rest, { name: 'router-persona', text: personaText, order: 0 }]
+  const kept = []
+  let replaced = false
+  for (const section of sections || []) {
+    if (!/persona/i.test(section.name)) {
+      kept.push(section)
+      continue
+    }
+    if (replaced) continue
+    replaced = true
+    kept.push({ ...section, text: personaText })
+  }
+  if (!replaced) kept.unshift({ name: 'router-persona', text: personaText })
+  return kept
 }
