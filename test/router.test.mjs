@@ -9,15 +9,16 @@
  *   5. 非 DeepSeek Flash 模型走首条 user/message 的关键词分类；
  *   6. `session.events` 已不存在时不再被读取（读旧属性会抛 TypeError）；
  *   7. 工具目录里没有 shell 时降级告警，而不是让整轮装配失败；
- *   8. 组合覆盖宿主交还给 preset 的每一行（防止「没写一行」变成静默裁能力）。
+ *   8. 组合覆盖宿主交还给 preset 的每一行（防止「没写一行」变成静默裁能力）；
+ *   9. 交付形态自洽：声明行 id / config.id / 包子路径引用（搬迁到声明行之后）。
  */
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   applyPersona, coreFor, isFlashModel, personaFor, sessionEvents, sessionMode,
-} from './router-core.mjs'
-import { apply } from './router-bootstrap.mjs'
+} from '../lib/router-core.mjs'
+import { apply } from '../lib/router-bootstrap.mjs'
 
 // --- 1. 模型识别：渠道无关，只认 DeepSeek 家族的 flash ----------------------
 for (const id of [
@@ -179,12 +180,19 @@ const HOST_DELEGATED_ROWS = [
   'skill-filesystem', 'tool-skill', 'tool-goal', 'plan-mode',
   'compaction-basic', 'command-compact', 'tool-result-pruner',
   'tool-subagent-control', 'tool-subagent-list-agents', 'tool-subagent',
-  'tool-subagent-fork', 'workflow-worker-thread', 'tool-workflow', 'tool-ralph',
+  'tool-subagent-fork', 'workflow-ptc', 'tool-workflow', 'tool-ralph',
   'agent-instructions', 'tool-todo', 'tool-web',
 ]
-const composition = readFileSync(
-  fileURLToPath(new URL('./agent.cordis.yml', import.meta.url)), 'utf8',
+// 组合已从「preset 目录里的 agent.cordis.yml」搬进 bundle patch 的声明行
+// （presets/router-flash.patch.yml），整段缩进 +10。下面的断言仍按原样的零缩进
+// 文本比对，所以先 dedent 回来——搬迁不该顺带改掉这些断言的字面。
+const patch = readFileSync(
+  fileURLToPath(new URL('../presets/router-flash.patch.yml', import.meta.url)), 'utf8',
 )
+const composition = patch
+  .split('\n')
+  .map((line) => (line.startsWith('          ') ? line.slice(10) : line))
+  .join('\n')
 const missingRows = HOST_DELEGATED_ROWS.filter((id) => !composition.includes(`- id: ${id}\n`))
 assert.deepEqual(missingRows, [],
   `宿主已把下列行交给 preset，组合里不能缺：${missingRows.join(', ')}`)
@@ -208,4 +216,18 @@ assert.deepEqual(sessionEvents({ snapshotEvents: () => [{ type: 'x' }] }), [{ ty
 assert.deepEqual(sessionEvents({ events: [{ type: 'y' }] }), [{ type: 'y' }])
 
 assert.deepEqual(coreFor('weak'), ['read', 'write', 'edit'])
+
+// --- 交付形态：声明行自洽 ------------------------------------------------
+// 0.2.0-rc.2 起 preset 是插件行，行 id 是 Loader 地址、config.id 才是会话记住的
+// 身份。两者混用会让老会话认不回自己的 preset，所以在此钉死。
+assert.match(patch, /- id: preset-router-flash\n      name: '@deepseek-ai\/dsh-agent-preset'\n/,
+  '声明必须由 @deepseek-ai/dsh-agent-preset 承载，行 id 为 preset-router-flash')
+assert.match(patch, /config:\n        id: router-flash\n/,
+  'config.id 必须是 router-flash（会话身份，改名会让老会话失联）')
+// 资产必须从已安装的包解析：rc.2 明确要求 preset 不能引用自身目录里的相对文件。
+assert.equal(/name: \.\//.test(patch), false,
+  'preset 内不得再有 ./ 相对模块引用（改用包子路径导出）')
+assert.match(composition, /- id: router-bootstrap\n  name: dsh-router-flash\/router-bootstrap\n/,
+  '路由模块必须走包内子路径导出 dsh-router-flash/router-bootstrap')
+
 console.log('router-flash preset: all checks passed')

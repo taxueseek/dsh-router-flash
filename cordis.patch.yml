@@ -1,4 +1,10 @@
-# dsh-router-flash bundle 补丁层：安装后自动挂入 web profile 组合。
+# dsh-router-flash bundle 补丁层（1/2）：宿主行。
+#
+# preset 本体在 presets/router-flash.patch.yml（2/2）——宿主读的是组合层，
+# 0.2.0-rc.2 起没有任何目录形态的 preset，本包也不写盘。
+#
+# 这一行的职责只剩一件事：让包内的 lib/index.js 参与加载，从而在启动时对
+# 旧的 `$DSH_HOME/.agent-presets/router-flash/` 做一次只读体检并给出迁移提示。
 - insert:
     - id: router-flash
       name: dsh-router-flash
