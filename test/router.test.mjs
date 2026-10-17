@@ -230,4 +230,20 @@ assert.equal(/name: \.\//.test(patch), false,
 assert.match(composition, /- id: router-bootstrap\n  name: dsh-router-flash\/router-bootstrap\n/,
   '路由模块必须走包内子路径导出 dsh-router-flash/router-bootstrap')
 
+// --- 9. 0.2.1 能力恢复：时钟与定时工具必须在组合里 ---------------------------
+// 两者都是「模型可见的加法」，但性质是恢复缺口而非口味：宿主不再提供，官方
+// standard 由 preset 声明。少写一行的后果是模型不知道今天几号、也建不了提醒。
+assert.match(composition, /- id: time-context\n  name: '@deepseek-ai\/dsh-time-context'\n/,
+  '时钟行必须在组合里（宿主 Web 组合不声明它）')
+assert.match(composition, /- id: tool-schedule\n  name: '@deepseek-ai\/dsh-tool-schedule'\n/,
+  '定时提醒行必须在组合里（官方 standard 有）')
+
+// --- 10. flashGuidance 开关：必须可达，且不得退回 spec 句 --------------------
+// 这条分支此前是一处未定义标识符（FLASH_NEUTRAL），一次都没被调用过——因为它
+// 既没定义也没接线。现在两头都钉住：值是中性句，且不等于 spec 的 persona。
+const neutral = personaFor('weak', 'deepseek-v4-flash', { flashGuidance: false })
+assert.equal(neutral, 'You are a helpful assistant.', 'flashGuidance:false 必须退回中性句')
+assert.notEqual(neutral, personaFor(0, 'deepseek-v4-pro'),
+  '不得退回 spec 句：P11 实测它对 Flash 是反向路由')
+
 console.log('router-flash preset: all checks passed')

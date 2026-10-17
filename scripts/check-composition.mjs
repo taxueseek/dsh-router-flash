@@ -48,11 +48,13 @@ const ALLOWED_DIFFS = [
   { id: "command-goal", kind: "only-baseline", note: "家族工具面：不补 /goal（README「工具面」）" },
   { id: "present", kind: "only-baseline", note: "模型可见的加法（约 464 字符描述），未测量不补" },
   { id: "tool-plugin-manager", kind: "only-baseline", note: "插件管理面属宿主/部署层，不进 preset" },
+  { id: "tool-plugin-market", kind: "only-baseline", note: "同上；官方行本身 disabled:true，不给 agent" },
   { id: "persona", kind: "config", note: "身份句不同且无 suffix；本行只是 fallback，装配时被路由器整体替换" },
-  { id: "tool-ralph", kind: "config", note: "官方 standard 为 disabled:true，本 preset 启用——真实差异，待一次测量决定去留" },
+  { id: "tool-ralph", kind: "only-here", note: "官方 0.2.1 已整行移除；本 preset 仍开 maxRounds:64——真实差异，去留待一次测量" },
   { id: "tool-subagent", kind: "config", note: "缺 0.2.0 新增的 modelSelectionSettings:true（模型可见加法，未测量不跟）" },
-  { id: "tool-subagent-codex", kind: "config", note: "两行本就 disabled:true，取法差异不可观测" },
-  { id: "tool-subagent-claude-code", kind: "config", note: "同上" },
+  { id: "tool-subagent-fork", kind: "config", note: "本 preset 多 backgroundMode: continuable（可续聊），官方无该键" },
+  { id: "tool-subagent-codex", kind: "only-here", note: "官方已移除该行；本行 disabled:true，不注册工具，不可观测" },
+  { id: "tool-subagent-claude-code", kind: "only-here", note: "同上" },
   { id: "tool-web", kind: "config", note: "家族取值 fetch:false（模型可见减法，未测量不改）" },
 ];
 

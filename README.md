@@ -27,7 +27,7 @@ isFlashModel(modelId) = /deepseek/i.test(modelId) && /flash/i.test(modelId)
 ## 安装
 
 ```bash
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.0
+dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.1
 ```
 
 安装后**重启 DSH**：`router-flash` preset 会以显示名「探索模式」出现在预设选择器里。
@@ -48,7 +48,7 @@ dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.0
 ## 升级
 
 ```bash
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.0
+dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.1
 ```
 
 重启 DSH 后声明行随补丁层换新，**没有需要覆盖的用户目录**。
@@ -66,7 +66,7 @@ dsh plugin --profile web remove dsh-router-flash
 ## 使用
 
 1. 安装后重启 dsh，在新会话的预设选择器里选「探索模式」。
-2. 直接提交任务即可。persona 会自动注入「分类 + 回顾 + 反跑题 + 深度思考 + 决策闭环」五个锚。
+2. 直接提交任务即可。persona 会自动注入「分类 + 回顾 + 反跑题 + 深度思考 + 决策闭环」五个锚。**注意口径**：对 DeepSeek Flash，代码层不判任务类型——一律 weak 分支，分类由模型按 persona 里那句自己判；`classifyTask()` 的关键词分类只服务非 Flash 模型。
 3. 会话启动后，模型的 system prompt 应包含：
    ```
    You are a helpful assistant.
@@ -100,6 +100,15 @@ dsh plugin --profile web remove dsh-router-flash
 ## 工具面：限制的性质有两种，本 preset 分别处理
 
 `dsh-web-app`（Web 宿主 bundle）在宿主层把 **23 个 agent 面行设为 `disabled: true`**，注释写明 **「Presets own the human command and model-facing tool」**，涵盖 `tool-web` / `command-goal` / `tool-goal` / `tool-bash` … 等模型与命令入口。**所以在 Web 部署里，preset 少写一行 = 该能力对该 preset 的 agent 直接不存在。**
+
+由此还派生一条与「限制」无关、但同样致命的规则：**宿主不声明、只有官方 preset 声明的行，本 preset 也不写就等于没有**。0.4.1 据此补回两行，性质是**恢复缺口**，不是口味加法：
+
+| 补回的行 | 没有它时的实际后果 | 成本 |
+|---|---|---|
+| `time-context` | 模型拿不到当前时间/时区，对「今天」「最近」「这文件什么时候改的」只能猜 | 默认 10 分钟注入一次读数，约百字符/次，可忽略 |
+| `tool-schedule` | 没有 `schedule_create/list/update/delete`，建不了定时提醒 | 4 个工具的 schema，仅首轮之后可见 |
+
+另外把 `plan-mode` 的 `section` 首句改回官方 0.2.1 的措辞（`until the user approves your plan through exit_plan_mode`）。旧句写的是 `until exit_plan_mode succeeds`——把「调用成功」当成批准条件，模型可以在用户没点头时自行退出计划模式。
 
 上游与同类插件在这块**一致地做了限制**：
 
@@ -161,6 +170,17 @@ dsh plugin --profile web remove dsh-router-flash
 
 策略始终是**只修兼容、不动行为**。上游 v0.1.0 只适配到 dsh `0.1.0-rc.6`，在 `0.1.5-rc.2` 上会装得上、用不了。
 
+### 0.2.1（0.4.1 本轮）
+
+这一代没有改 agent preset 的契约（`system-prompt/assemble`、`sections/tools/contexts`、`snapshotEvents()` 都仍在），变的是**官方 preset 的组合本身**：
+
+| 偏差 | 症状 | 修法 |
+|---|---|---|
+| 官方 standard 新增 `time-context` | 本 preset 不写 → 模型没有当前时间，日期类判断全靠猜 | 补该行（宿主 Web 组合不声明它，只能由 preset 给） |
+| 官方 standard 新增 `tool-schedule` | 没有 `schedule_*` 四个工具，建不了定时提醒 | 补该行 |
+| `plan-mode` 的 `section` 改文案 | 旧句 `until exit_plan_mode succeeds` 把「调用成功」当批准条件，模型可在用户未批准时退出计划模式 | 首句改回官方措辞，其余逐字保留 |
+| 官方移除 `tool-ralph` / `tool-subagent-codex` / `-claude-code` 行 | 本 preset 仍有这三行（ralph 还是启用态） | 记为 `only-here` 白名单，去留待测量，本轮不动 |
+
 ### 0.2.0-rc.2（0.4.0 本轮）
 
 | 偏差 | 症状 | 修法 |
@@ -192,12 +212,15 @@ dsh plugin --profile web remove dsh-router-flash
 | 行 | 性质 | 理由 |
 |---|---|---|
 | `router-bootstrap` | 只本 preset 有 | 路由器本身 |
-| `command-goal` / `present` / `tool-plugin-manager` | 只官方有 | 家族工具面：不补（前两者见「工具面」；插件管理面属宿主/部署层） |
+| `command-goal` / `present` / `tool-plugin-manager` / `tool-plugin-market` | 只官方有 | 家族工具面：不补（前两者见「工具面」；后两者属宿主/部署层，且官方行本身 `disabled: true`） |
 | `persona` | 取值不同 | 身份句不同且无 `suffix`；本行只是 fallback，装配时被路由器整体替换 |
-| `tool-ralph` | 取值不同 | 官方 `disabled: true`，本 preset 启用——**真实差异，待一次测量决定去留** |
+| `tool-ralph` | 只本 preset 有 | 官方 0.2.1 已整行移除；本 preset 仍开 `maxRounds: 64`——**真实差异，去留待一次测量** |
 | `tool-subagent` | 取值不同 | 缺 0.2.0 新增的 `modelSelectionSettings: true`（模型可见加法，未测量不跟） |
-| `tool-subagent-codex` / `-claude-code` | 取值不同 | 两行本就 `disabled: true`，取法差异不可观测 |
+| `tool-subagent-fork` | 取值不同 | 本 preset 多 `backgroundMode: continuable`（可续聊），官方无该键 |
+| `tool-subagent-codex` / `-claude-code` | 只本 preset 有 | 两行均 `disabled: true`，不注册工具，不可观测 |
 | `tool-web` | 取值不同 | 家族取值 `fetch: false`（模型可见减法，未测量不改） |
+
+**0.4.1 已消掉的差异**：`time-context`、`tool-schedule` 从「只官方有」变成两边都有（能力恢复），`plan-mode` 的 `section` 文案与官方逐字对齐。
 
 补充说明：**「config 键是否在该包的 schema 里」不在离线检查范围内**——那份 schema 只在运行时存在。要查它用宿主 Inspect：`cordis_inspect_query` → `host/Config/listConfigs {name: "@deepseek-ai/dsh-<包名>"}`。
 
@@ -225,7 +248,7 @@ npm test          # = node test/router.test.mjs && node scripts/check-compositio
 
 **不需要 `npm install`**：本包零依赖，体检脚本从本机的 dsh 运行时借 `js-yaml` 与官方 preset 文件。
 
-- `test/router.test.mjs` —— 纯逻辑回归：模型识别（DeepSeek Flash 命中、同名 flash 的其他家族不命中）、persona 原位替换与去重、首轮工具面（core + 平台 shell）、首次 `tool/call` 后放开全目录、运行时上下文保留、关键词分类、缺 shell 时的降级告警，以及交付形态自洽（声明行 id / `config.id` / 包子路径引用）。
+- `test/router.test.mjs` —— 纯逻辑回归：模型识别（DeepSeek Flash 命中、同名 flash 的其他家族不命中）、persona 原位替换与去重、首轮工具面（core + 平台 shell）、首次 `tool/call` 后放开全目录、运行时上下文保留、关键词分类、缺 shell 时的降级告警、交付形态自洽（声明行 id / `config.id` / 包子路径引用），以及 0.4.1 新增的两条：时钟行与定时行必须在组合里、`flashGuidance:false` 必须退回中性句且不得退回 spec 句。
 - `scripts/check-composition.mjs` —— 契约体检，四条断言各自报出：①声明行结构自洽；②自有引用都能由 `exports` 提供且文件存在；③组合里每个 `@deepseek-ai/...` 行名都能在当前 dsh 运行时里解析（**改名漂移的拦网**）；④与官方 `standard` 的差异集恰好等于白名单。找不到 dsh 时明确报 SKIP 而非假装通过；`--strict` 把 SKIP 升级为 FAIL。
 
 ## 适用范围

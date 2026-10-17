@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.1
+
+### 对齐 DSH 0.2.1：补齐两行能力、修一个可达异常、门禁修绿
+
+本轮不动已测行为：persona、首轮工具面、`contexts: []`、`fetch: false` 全部原样。改的只有「宿主已经变了、组合没跟上」和「写了但没接线」两类。
+
+- **组合漂移归零（`npm test` 由 4/5 红 → 5/5 绿）**：与官方 `standard`（0.2.1-rc.1）逐行比对后，差异从 8 处未解释降到 12 处**全部有理由**（含 `tool-plugin-market`、`tool-subagent-fork` 两条新解释）。
+- **补 `time-context`（时钟）**：宿主 Web 组合不声明这一行，官方 standard / cordis / ptc 都由 preset 声明。不补，模型对「今天」「最近」只能猜。默认 10 分钟一次读数。
+- **补 `tool-schedule`（定时提醒）**：`schedule_create/list/update/delete` 四个工具。官方 standard 有、本 preset 此前漏了这一行。
+- **`plan-mode` 文案对齐**：`until exit_plan_mode succeeds` → `until the user approves your plan through exit_plan_mode`。旧句把「调用成功」当批准条件。
+- **修 `FLASH_NEUTRAL` 未定义**（`router-core.mjs`）：`personaFor(mode, id, { flashGuidance: false })` 此前必抛 `ReferenceError`，因为该常量从未定义；同时 `apply(ctx, config)` 不读 config，开关既没定义也没接线。现在两头都通，默认 `flashGuidance: true`（行为不变），并成为声明行里的可配项。
+- **删死代码**：`overrides` Map（只写不读），配置改为从 `config.flashGuidance` 读取。
+- **peer 补两行**：`@deepseek-ai/dsh-time-context`、`@deepseek-ai/dsh-tool-schedule`，让宿主的兼容门禁能按名字判定（0.4.0 立的规矩：声明了才拦得住）。
+- **测试 +3**：时钟行/定时行必须在组合里；`flashGuidance:false` 必须退回中性句且不得退回 spec 句（P11 反向路由）。
+- **文档口径修正**：README 不再暗示「代码在判任务类型」——对 Flash 一律 weak，分类由模型按 persona 自判，关键词分类只服务非 Flash。
+
+### 实测基线（0.2.1-rc.1，本轮）
+
+| 指标 | 值 |
+|---|---|
+| `npm test` | 5/5 通过（修前 4/5，退出码 1） |
+| 单次 `system-prompt/assemble` | 1.3µs（首轮）/ 0.7–0.8µs（晋级后，3000 事件仍 0.7µs） |
+| 模块加载 | import 30–90ms（含 node 启动），RSS +0.5MB |
+| persona 注入 | 663 字符 ≈166 tokens/轮 |
+| deepseek-flash 缓存命中（10-17） | 611 calls，未命中输入 599,805 tokens，缓存读 113,014,528 → 99.5% |
+
 ## 0.4.0
 
 ### 破坏性：preset 改为声明行交付（DSH 0.2.0-rc.2）

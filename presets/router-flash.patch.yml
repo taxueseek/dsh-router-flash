@@ -69,6 +69,14 @@
             config:
               prefix: You are a helpful software engineer assistant.
 
+          # 时钟：每步给模型一次带来源的读数（当前时间 / 浏览器时区 / 距上一条可见
+          # 消息的间隔），默认 10 分钟注入一次。宿主 Web 组合不声明这一行（该包 README：
+          # "The shipped Web composition carries no row for it"），官方 standard / cordis /
+          # ptc 都由 preset 声明——不写它，模型对「今天」「最近」「这个文件什么时候改的」
+          # 只能靠猜。属能力恢复，不是口味加法。
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'
             config:
@@ -79,7 +87,11 @@
           # durable tool/call, exposes the full Standard catalog.
           - id: router-bootstrap
             name: dsh-router-flash/router-bootstrap
-            config: {}
+            config:
+              # 默认 true：Flash 走 w7 引导。设 false 退回中性句（无分类指令、无锚点），
+              # 用来做「引导是否有害」的对照——P21 记录过它在连续任务链上的负收益。
+              # 注意不能退回 SPEC 句：P11 实测那对 Flash 是反向路由。
+              flashGuidance: true
 
           # ── shell ───────────────────────────────────────────────────────────────────
 
@@ -121,6 +133,13 @@
           # chooses is whether its agent can collect and stop background work at all.
           - id: tool-jobs
             name: '@deepseek-ai/dsh-tool-jobs'
+
+          # 定时提醒：schedule_create / list / update / delete 四个工具，只作用于调用
+          # 它的 Session；存储、调度与投递由宿主 `dsh-schedule` 服务负责。官方 standard
+          # 有这一行、本 preset 此前没有——不是家族取舍（家族写作时这份目录还没被收回
+          # preset），是 0.2.1 把 agent 面收回 preset 后留下的缺口。属能力恢复。
+          - id: tool-schedule
+            name: '@deepseek-ai/dsh-tool-schedule'
 
           # ── skills ──────────────────────────────────────────────────────────────────
 
@@ -174,7 +193,7 @@
                 name: '@deepseek-ai/dsh-plan-mode'
                 config:
                   section: |
-                        You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+                        You are in plan mode. Stay in plan mode until the user approves your plan through exit_plan_mode or switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
 
                         Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
 
