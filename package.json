@@ -1,7 +1,6 @@
 {
   "name": "dsh-router-flash",
   "version": "0.4.1",
-  "license": "MIT",
   "description": "DSH agent preset 分发包：探索模式（DeepSeek V4 Flash，模型 id 命中即生效，不绑定渠道）。以 @deepseek-ai/dsh-agent-preset 声明行交付，安装即生效，无落盘同步。",
   "type": "module",
   "main": "lib/index.js",
@@ -9,18 +8,48 @@
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
     "./router-bootstrap": "./lib/router-bootstrap.mjs",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./presets/router-flash.patch.yml": "./presets/router-flash.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
-    "lib",
-    "presets",
-    "scripts",
-    "test",
+    "lib/",
+    "presets/",
     "cordis.patch.yml",
+    "install.sh",
     "README.md",
-    "CHANGELOG.md",
-    "NOTICE"
+    "README.zh.md",
+    "intro.png",
+    "ui-preset-picker.png",
+    "ui-first-turn-tools.png",
+    "LICENSE",
+    "NOTICE",
+    "CHANGELOG.md"
   ],
+  "keywords": [
+    "dsh",
+    "deepseek",
+    "harness",
+    "agent-harness",
+    "plugin",
+    "preset",
+    "agent-preset",
+    "router",
+    "flash",
+    "deepseek-v4-flash"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiaoxianyu-office/dsh-router-flash.git"
+  },
+  "homepage": "https://github.com/xiaoxianyu-office/dsh-router-flash",
+  "bugs": {
+    "url": "https://github.com/xiaoxianyu-office/dsh-router-flash/issues"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
   "dsh": {
     "bundle": {
       "patch": [
@@ -31,6 +60,21 @@
     "client": {
       "platform": "web",
       "inject": []
+    },
+    "compatibility": {
+      "dsh": "^0.2.0-rc.2 || ^0.2.1",
+      "dshReleases": {
+        "0.2.0-rc.2": "compatible",
+        "0.2.1-rc.1": "compatible"
+      },
+      "dshOperations": {
+        "0.2.0-rc.2": {
+          "install": "unknown",
+          "start": "unknown",
+          "uninstall": "unknown",
+          "rollback": "unknown"
+        }
+      }
     }
   },
   "scripts": {

@@ -3,16 +3,18 @@ NOTICE
 This repository is a derived work. It builds on the DeepSeek Harness
 ecosystem and on prior open work:
 
-- The `preset/` directory (agent.cordis.yml, preset.yml,
-  router-bootstrap.mjs, router-core.mjs) is directly derived from
-  **SheberDavid/v4-flash-godmode-opencode-go** (no standalone LICENSE file;
-  its README declares the content is based on MIT-licensed projects).
+- The `presets/` composition (`presets/router-flash.patch.yml`, formerly the
+  `preset/` directory's agent.cordis.yml / preset.yml) and the router logic
+  (`lib/router-bootstrap.mjs`, `lib/router-core.mjs`) are directly derived
+  from **SheberDavid/v4-flash-godmode-opencode-go** (no standalone LICENSE
+  file; its README declares the content is based on MIT-licensed projects).
   That content originates from **yjh051108/dsh-router-standard**
   (MIT, Copyright (c) 2026 yjh051108) and the dsh-routing-suite research.
   The original authors' MIT copyright and license terms apply to the
   derived content of those files.
-- The bundle wrapper added by this repository (`lib/`, `package.json`,
-  `cordis.patch.yml`) is new code contributed by xiaoxianyu-office under
+- The bundle wrapper added by this repository (`lib/index.js`,
+  `lib/client.js`, `package.json`, `cordis.patch.yml`, `install.sh`,
+  `scripts/`, `test/`) is new code contributed by xiaoxianyu-office under
   the MIT License, sharing the same copyright notice as this repository.
 
 DeepSeek is a trademark of DeepSeek. This project is a community artifact
