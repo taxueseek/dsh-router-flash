@@ -168,7 +168,8 @@ Zero runtime dependencies unchanged: `dependencies` is still empty.
   reverted three unmeasured changes.
 - **0.2.1** — added `command-goal` (correcting the previous version's
   misjudgement that "the host already provides it").
-- **0.2.0** — channel-agnostic (match only on a model id containing
-  `deepseek` + `flash`) + tool face aligned with the built-in presets + a
-  startup race fixed.
+- **0.2.0** — model- and channel-agnostic (match only on a model id containing
+  `deepseek` + `flash`; non-matching models still use the preset through the
+  generic classification branch) + tool face aligned with the built-in presets +
+  a startup race fixed.
 - **0.1.1** — adapted to dsh 0.1.5-rc.2.

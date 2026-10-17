@@ -26,8 +26,8 @@
 
 ## 一句话
 
-dsh 网页端里给 DeepSeek V4 Flash 用的 agent preset——只看模型 id（任何渠道都认），
-首轮收窄工具面，之后就不再多管。
+dsh 网页端里模型无关的 agent preset——只看模型 id，首轮收窄工具面，之后就不再多管。
+为 DeepSeek V4 Flash 而生，但不限于它。
 
 ## 这是什么
 
@@ -39,7 +39,7 @@ dsh 网页端里给 DeepSeek V4 Flash 用的 agent preset——只看模型 id�
 
 | 阶段 | 行为 |
 |---|---|
-| **命中** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)`，渠道无关 |
+| **命中** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)`，模型与渠道都无关 |
 | **persona** | 对 Flash 一律 weak 分支（w7 引导）：分类、回顾、反跑题、深度思考、决策闭环 |
 | **首轮** | 只给 `read` / `write` / `edit` 加平台 shell（`bash`，Windows 上是 `pwsh`） |
 | **首次 `tool/call` 之后** | 放开 29 行全目录，路由器不再介入 |
@@ -47,7 +47,23 @@ dsh 网页端里给 DeepSeek V4 Flash 用的 agent preset——只看模型 id�
 路由器挂在 `system-prompt/assemble` 接缝上，按轮次改写模型目录。模式由持久会话事件
 推导，所以 resume / reload 之后仍然保持。
 
-## 命中规则（渠道无关）
+## 模型无关，是演化出来的分支
+
+本 preset 是早期 `dsh-router-flash`（v0.1.0，绑定单一渠道的 DeepSeek V4 Flash）演化
+出来的分支。路由逻辑重做后，**不再绑定某个厂商或模型家族**：
+
+- **任何渠道**——命中只看模型 id，不看谁在转卖。任何提供 DeepSeek V4 Flash 的渠道
+  都拿到同一套引导。
+- **任何模型**——不命中 `isFlashModel` 的模型仍能用本 preset 的通用分支：首条用户消息的
+  关键词分类（build/fix）决定路由。所以 `deepseek-v4-pro`、`gemini-2.5-flash`、
+  `qwen3-flash`、`gpt-5-flash` 等等都能用「探索模式」。
+- **一份 preset 服务所有模型**——同一份声明行服务每个模型，路由器按会话自适应，
+  不需要每个厂商配一份 preset。
+
+这就是扩展性收益：新增模型或渠道不需要改 preset——只要模型 id 命中（以及路由里的
+`provider` 配置）。
+
+## 命中规则（模型与渠道都无关）
 
 ```
 isFlashModel(modelId) = /deepseek/i.test(modelId) && /flash/i.test(modelId)

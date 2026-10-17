@@ -26,9 +26,9 @@
 
 ## In one line
 
-An agent preset for DeepSeek V4 Flash in the dsh web GUI — matches on the
-model id alone (any channel), narrows the first turn's tool face, then gets out
-of the way.
+A model-agnostic agent preset for the dsh web GUI — matches on the model id
+alone, narrows the first turn's tool face, then gets out of the way. Built for
+DeepSeek V4 Flash, usable with any model.
 
 ## What it is
 
@@ -41,7 +41,7 @@ What it does:
 
 | Stage | Behaviour |
 |---|---|
-| **Match** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)` — channel-agnostic |
+| **Match** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)` — model- and channel-agnostic |
 | **Persona** | For Flash, always the weak branch (w7 guidance): classify, review, stay on topic, think deeply, close the loop |
 | **First turn** | Only `read` / `write` / `edit` plus the platform shell (`bash`, or `pwsh` on Windows) |
 | **After the first `tool/call`** | The full 29-row catalog opens and the router stops touching anything |
@@ -50,7 +50,25 @@ The router hooks the `system-prompt/assemble` seam and rewrites the model
 catalog by turn. Mode derives from durable session events, so resume/reload
 keeps it.
 
-## Match rule (channel-agnostic)
+## Model-agnostic by design
+
+This preset is the evolved branch of the earlier `dsh-router-flash` (v0.1.0,
+which was bound to a single provider's DeepSeek V4 Flash). The routing was
+rebuilt so the preset is **not tied to one vendor or model family**:
+
+- **Any channel** — the match is on the model id, not on who resells it. Any
+  provider serving DeepSeek V4 Flash gets the same guidance.
+- **Any model** — models that do not match `isFlashModel` still use the preset
+  through the generic branch: keyword classification of the first user message
+  (build/fix) picks the routing. So `deepseek-v4-pro`, `gemini-2.5-flash`,
+  `qwen3-flash`, `gpt-5-flash` and others all work with 「探索模式」.
+- **One preset, many models** — the same declaration row serves every model;
+  the router adapts per session instead of needing a preset per vendor.
+
+This is the extensibility gain: adding a new model or channel needs no preset
+change — only the model id and (for routing) the provider config.
+
+## Match rule (model- and channel-agnostic)
 
 ```
 isFlashModel(modelId) = /deepseek/i.test(modelId) && /flash/i.test(modelId)
