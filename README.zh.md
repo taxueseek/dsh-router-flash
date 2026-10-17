@@ -73,14 +73,14 @@ preset。
 需要 harness ≥ 0.2.0-rc.2（在 0.2.0-rc.2 上实测，0.2.1-rc.1 在跑）。
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/xiaoxianyu-office/dsh-router-flash/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/taxueseek/dsh-router-flash/main/install.sh | sh
 # 重启 DSH
 ```
 
 等价手工操作：
 
 ```sh
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.1
+dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
 # 重启 DSH
 ```
 
@@ -106,7 +106,7 @@ dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.1
 ## 升级
 
 ```sh
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.1
+dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
 ```
 
 重启 DSH 后声明行随补丁层换新，**没有需要覆盖的用户目录**。

@@ -2,7 +2,7 @@
 # dsh-router-flash installer — git-channel install through the dsh CLI.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/xiaoxianyu-office/dsh-router-flash/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/taxueseek/dsh-router-flash/main/install.sh | sh
 #   sh install.sh [--profile <name>]   (default profile: web; Windows: Git Bash)
 #
 # Why the git channel: this package is not published to npm at all — the
@@ -47,4 +47,4 @@ if ! command -v pnpm >/dev/null 2>&1; then
 fi
 
 say "installing dsh-router-flash ($REF) into profile \"$PROFILE\" via the git channel..."
-exec dsh plugin --profile "$PROFILE" add -w "github:xiaoxianyu-office/dsh-router-flash#$REF"
+exec dsh plugin --profile "$PROFILE" add -w "github:taxueseek/dsh-router-flash#$REF"

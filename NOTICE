@@ -14,7 +14,7 @@ ecosystem and on prior open work:
   derived content of those files.
 - The bundle wrapper added by this repository (`lib/index.js`,
   `lib/client.js`, `package.json`, `cordis.patch.yml`, `install.sh`,
-  `scripts/`, `test/`) is new code contributed by xiaoxianyu-office under
+  `scripts/`, `test/`) is new code contributed by taxueseek under
   the MIT License, sharing the same copyright notice as this repository.
 
 DeepSeek is a trademark of DeepSeek. This project is a community artifact

@@ -41,11 +41,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xiaoxianyu-office/dsh-router-flash.git"
+    "url": "git+https://github.com/taxueseek/dsh-router-flash.git"
   },
-  "homepage": "https://github.com/xiaoxianyu-office/dsh-router-flash",
+  "homepage": "https://github.com/taxueseek/dsh-router-flash",
   "bugs": {
-    "url": "https://github.com/xiaoxianyu-office/dsh-router-flash/issues"
+    "url": "https://github.com/taxueseek/dsh-router-flash/issues"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"

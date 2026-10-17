@@ -78,14 +78,14 @@ Requires harness ≥ 0.2.0-rc.2 (verified on 0.2.0-rc.2; also running on
 0.2.1-rc.1).
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/xiaoxianyu-office/dsh-router-flash/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/taxueseek/dsh-router-flash/main/install.sh | sh
 # restart DSH
 ```
 
 Manual equivalent:
 
 ```sh
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.1
+dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
 # restart DSH
 ```
 
@@ -114,7 +114,7 @@ To make it the **default preset**, override the registry row in the profile's
 ## Upgrade
 
 ```sh
-dsh plugin --profile web add -w github:xiaoxianyu-office/dsh-router-flash#v0.4.1
+dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
 ```
 
 After a restart the declaration row is replaced with the patch layer; **there
