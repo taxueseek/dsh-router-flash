@@ -58,10 +58,12 @@ rebuilt so the preset is **not tied to one vendor or model family**:
 
 - **Any channel** — the match is on the model id, not on who resells it. Any
   provider serving DeepSeek V4 Flash gets the same guidance.
-- **Any model** — models that do not match `isFlashModel` still use the preset
-  through the generic branch: keyword classification of the first user message
-  (build/fix) picks the routing. So `deepseek-v4-pro`, `gemini-2.5-flash`,
-  `qwen3-flash`, `gpt-5-flash` and others all work with 「探索模式」.
+- **Any model, but not the same guidance** — ids map to four families:
+  `flash` (DeepSeek + flash) gets w7 plus first-turn narrowing; other DeepSeek
+  models get w6 keyword classification plus narrowing; `longcat` gets its own
+  long-context persona plus narrowing; `third-party` models (gemini, qwen,
+  gpt, …) no longer narrow the first turn, while their persona still follows
+  keyword classification by default (neutral is opt-in).
 - **One preset, many models** — the same declaration row serves every model;
   the router adapts per session instead of needing a preset per vendor.
 
@@ -74,17 +76,27 @@ change — only the model id and (for routing) the provider config.
 isFlashModel(modelId) = /deepseek/i.test(modelId) && /flash/i.test(modelId)
 ```
 
-| Model id | Match | Route |
+`modelFamily()` reads the id only:
+
+| Model id | Family | Route |
 |---|---|---|
-| `deepseek-v4-flash` | yes | weak (w7 guidance — this preset's main path) |
-| `deepseek-v4-flash-0731`, `deepseek-v4-flash-vision-exp` | yes | weak |
-| `deepseek-v4-pro`, `deepseek-chat` | no | keyword classification of the first user message (build/fix) |
-| `gemini-2.5-flash`, `qwen3-flash`, `gpt-5-flash` | no | same as above |
+| `deepseek-v4-flash`, `deepseek-v4-flash-0731`, `deepseek-v4-flash-vision-exp` | `flash` | w7 guidance + first-turn narrowing (this preset's main path) |
+| `deepseek-v4-pro`, `deepseek-chat` | `deepseek` | keyword classification of the first user message (build/fix) + first-turn narrowing |
+| `LongCat-*`, `longcat-*` | `longcat` | long-context persona (`WEAK_LONGCAT`) + first-turn narrowing |
+| `gemini-2.5-flash`, `qwen3-flash`, `gpt-5-flash` | `third-party` | keyword classification by default, neutral opt-in; **no first-turn narrowing** |
+
+**Only one third-party behaviour changed, because only one was measured**: the
+narrowed first turn kept the prompt explaining `glob`/`grep` while the schema
+carried neither. That mismatch reproduced in **13 of 13** historical
+third-party sessions on this machine (`scripts/replay-routing.mjs` replays
+them), so third-party models now always get the full catalog. The persona is
+untouched: w6 and w7 were measured only on DeepSeek models, so the default
+stays `classify`; `thirdPartyGuidance: neutral` is available for a measured
+A/B, not as a new default.
 
 **Why not match `flash` alone**: that would drag non-DeepSeek models
 (`gemini-2.5-flash`, `qwen3-flash`) into this preset's weak persona, which is a
-negative optimisation for them. Unmatched models can still use this preset —
-they just take the generic classification branch.
+negative optimisation for them.
 
 **Why not bind to `opencode-go`**: a model's capability comes from the model,
 not from who resells it. Any channel's DeepSeek V4 Flash should get the same
@@ -103,7 +115,7 @@ curl -fsSL https://raw.githubusercontent.com/taxueseek/dsh-router-flash/main/ins
 Manual equivalent:
 
 ```sh
-dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
+dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.5.0
 # restart DSH
 ```
 
@@ -132,7 +144,7 @@ To make it the **default preset**, override the registry row in the profile's
 ## Upgrade
 
 ```sh
-dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
+dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.5.0
 ```
 
 After a restart the declaration row is replaced with the patch layer; **there
@@ -194,7 +206,8 @@ The preset is **platform-agnostic**; dsh picks the shell tool automatically:
 
 | dsh-router-flash | Harness | Notes |
 | --- | --- | --- |
-| 0.4.1 | **0.2.1-rc.1 (current, running)** | Restores `time-context` + `tool-schedule`, aligns `plan-mode` wording, fixes an unreachable `FLASH_NEUTRAL` throw; composition drift 12/12 explained. |
+| 0.5.0 | **0.2.1-rc.5 (latest)** / 0.2.2-alpha.2 (alpha) | Adapts to 0.2.2-alpha.2: drops the removed `tool-subagent-control/list-agents` row, stops reading `assembled.tools` (now `ctx.tools.restrict()`); third-party models no longer get a narrowed first turn; adds `thirdPartyGuidance`. |
+| 0.4.1 | 0.2.1-rc.1 | Restores `time-context` + `tool-schedule`, aligns `plan-mode` wording, fixes an unreachable `FLASH_NEUTRAL` throw; composition drift 12/12 explained. |
 | 0.4.0 | 0.2.0-rc.2 (measured) | Breaking: preset delivered as a declaration row; no more disk sync. |
 | 0.3.1 | 0.1.5-rc.2 (historical) | Directory-form preset — **does not exist** on 0.2.0-rc.2. |
 
@@ -224,6 +237,7 @@ the declaration row itself:
 | Key | Default | Effect |
 |---|---|---|
 | `flashGuidance` | `true` | When `false`, Flash models get a neutral persona sentence instead of the w7 guidance. The spec sentence is never used as a fallback. |
+| `thirdPartyGuidance` | `classify` | Third-party persona policy. `classify`: keyword classification (0.4.1 behaviour). `neutral`: neutral sentence, no classification (opt-in, not yet measured). Neither narrows the first turn. DeepSeek families are unaffected. |
 
 Override by Loader row id in the profile's `cordis.patch.yml`:
 
@@ -528,8 +542,12 @@ dsh runtime.
 
 - Once `isFlashModel` matches, it always takes the weak branch (the author's
   measured optimum, w7).
-- Non-DeepSeek-Flash models (e.g. `deepseek-v4-pro`, `gemini-2.5-flash`) take
-  the keyword classification path and can still use the preset.
+- Non-Flash DeepSeek models (e.g. `deepseek-v4-pro`) take the keyword
+  classification path and can still use the preset.
+- Third-party models (e.g. `gemini-2.5-flash`) keep keyword
+  classification by default but no longer narrow the first turn; the neutral
+  sentence is opt-in via `thirdPartyGuidance: neutral`. LongCat ids form their
+  own `longcat` family with a dedicated long-context persona.
 - Complex build tasks (large projects, greenfield development) benefit most
   from the deep-thinking anchor.
 
@@ -581,10 +599,12 @@ This repository is a derived work. Its content comes from:
 | [SheberDavid/v4-flash-godmode-opencode-go](https://github.com/SheberDavid/v4-flash-godmode-opencode-go) | SheberDavid | no standalone LICENSE (its README declares it is based on MIT projects) | the direct source of the `presets/` composition and the dsh rc.6 adaptation logic |
 | [dsh-router-standard](https://github.com/yjh051108/dsh-router-standard) | yjh051108 | MIT (© 2026 yjh051108) | the origin of the Flash w7 persona, the deep-thinking anchor and the routing research |
 | [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite) | yjh051108 | MIT | routing research |
+| [HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM) | PhiAgent-0 contributors | Apache-2.0 (© 2026 PhiAgent-0 contributors) | source of the GDR/CCS decision-reuse logic (`evaluateGuard`, `ChiselPlanScheduler`, substitution certificates) |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek | MIT | the host framework |
 
 The bundle wrapper this repository adds (`package.json` / `cordis.patch.yml` /
-`presets/` / `lib/` / `scripts/`) is new code contributed by this repository.
+`presets/` / `lib/` / `scripts/`) is new code contributed by this repository,
+except for the HarnessMM-derived decision-reuse logic in `lib/` (see above).
 
 Full license and derivation-chain details are in [LICENSE](./LICENSE) and
 [NOTICE](./NOTICE). DeepSeek is a trademark of DeepSeek; this project is a

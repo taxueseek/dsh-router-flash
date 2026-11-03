@@ -1,5 +1,75 @@
 # Changelog
 
+## 0.5.0 — 2026-11-03 — third-party models stop getting a first turn they cannot use
+
+This change is limited to what a deterministic replay can prove. Replaying
+every `router-flash` session on this machine whose model is outside the
+DeepSeek family (`scripts/replay-routing.mjs`) gave **13 sessions**: all 13
+were narrowed on the first turn, and all 13 still carried prompt guidance for
+tools the first-turn schema did not contain (`glob`/`grep`; one also `read`).
+The model was told "use the glob tool — not shell find" while `glob` did not
+exist yet. That mismatch is the defect this release removes.
+
+### Fixed
+
+- **Preset no longer declares `@deepseek-ai/dsh-tool-subagent-control/list-agents`.**
+  DSH 0.2.2-alpha.2 merged `list_agents` into the control package's main entry and
+  removed the `./list-agents` subpath export. The old row failed to resolve, the
+  loader entry stayed `never started`, and preset validation rejected the whole
+  preset (`agent-preset/invalid`) — new sessions could not be created at all.
+  The row is gone; `tool-subagent-control` supplies `list_agents` on 0.2.2. On
+  hosts ≤ 0.2.1 that tool is simply absent (their main entry registers only
+  `send_message` / `interrupt_agent`).
+- **The assemble hook no longer reads `assembled.tools`.** 0.2.2-alpha.2 changed
+  `system-prompt/assemble` to hand listeners a `PromptPresentation` — sections,
+  contexts, variables — with tool declarations owned by the provider (and the
+  step's `toolSet` resolved before the hook runs). The old first-turn filter read
+  `assembled.tools.map(...)`, which threw `Cannot read properties of undefined
+  (reading 'map')` and failed the whole turn within 8 ms. On 0.2.2+ the persona
+  still comes from this hook and the first-turn narrowing now registers
+  `agent.ctx.tools.restrict({ allow: core + shell })` on `agent/created`, lifting
+  it on the first `tools/result`; hosts ≤ 0.2.1 keep the old assemble-time
+  filtering (their payload still carries `tools`).
+
+### Changed
+
+- **Third-party models no longer narrow the first turn.** `modelFamily()` now
+  splits ids into `flash` / `deepseek` / `longcat` / `third-party`; for
+  `third-party` the router returns the full catalog from the first request.
+  Persona is untouched: keyword classification still runs by default, exactly as
+  in 0.4.1.
+- **`thirdPartyGuidance` config key** (`classify` by default, `neutral` for a
+  neutral sentence) on the `preset-router-flash` declaration row. `neutral` is
+  opt-in only: no controlled comparison has been run on third-party models, and
+  an unmeasured persona is not made the default.
+
+### Added
+
+- `scripts/replay-routing.mjs`: replays session logs (multi-frame zstd aware)
+  and reports first-turn width, orphaned tool guidance, and the keyword
+  classification distribution. `npm run replay` runs it.
+- Tests pinning all four families and both third-party policies, including
+  that the third-party first turn is always the full catalog.
+
+### Not measured (do not read this as a performance claim)
+
+- Whether a neutral persona helps or hurts on third-party models. That needs a
+  controlled A/B with real model calls; until then the default stays `classify`.
+
+### License and attribution
+
+- **HarnessMM is now credited.** The decision-reuse logic in
+  `lib/router-core.mjs` (`evaluateGuard`, `shouldBypassCallback`,
+  `ChiselPlanScheduler`, `createSubstitutionCertificate`,
+  `isRedundantVerification`) and its wiring in `lib/router-bootstrap.mjs` are
+  derived from
+  [YuhuaJiang2002/HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM)
+  (Apache License 2.0, Copyright (c) 2026 PhiAgent-0 contributors). Those parts
+  remain available under Apache-2.0; the original license and NOTICE are
+  reproduced in `LICENSE-APACHE-2.0` and `NOTICE-HarnessMM`, and the root
+  `LICENSE` / `NOTICE` name the exception. Earlier releases carried a blanket
+  MIT notice with no HarnessMM credit.
+
 ## 0.4.1 — 2026-10-17
 
 Aligning with DSH 0.2.1: restore two rows of capability, fix one reachable

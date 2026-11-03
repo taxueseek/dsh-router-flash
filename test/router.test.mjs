@@ -6,7 +6,8 @@
  *   2. persona 原位替换（顺序、去重、plan-mode 段保留）；
  *   3. 工具面：首轮只留 core + 平台 shell，出现 tool/call 后放开全目录；
  *   4. 运行时上下文不被清空；
- *   5. 非 DeepSeek Flash 模型走首条 user/message 的关键词分类；
+ *   5. 家族路由：DeepSeek 非 Flash 走关键词分类；第三方默认中性句 + 全目录，
+ *      只有 thirdPartyGuidance:'classify' 才回到分类 + 首轮收窄；
  *   6. `session.events` 已不存在时不再被读取（读旧属性会抛 TypeError）；
  *   7. 工具目录里没有 shell 时降级告警，而不是让整轮装配失败；
  *   8. 组合覆盖宿主交还给 preset 的每一行（防止「没写一行」变成静默裁能力）；
@@ -16,7 +17,10 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
-  applyPersona, coreFor, isFlashModel, personaFor, sessionEvents, sessionMode,
+  applyPersona, coreFor, createSubstitutionCertificate, evaluateGuard,
+  isDeepSeekModel, isFlashModel, isLongCatModel, isRedundantVerification,
+  modelFamily, personaFor, sessionEvents, sessionMode, shouldBypassCallback,
+  ChiselPlanScheduler,
 } from '../lib/router-core.mjs'
 import { apply } from '../lib/router-bootstrap.mjs'
 
@@ -48,11 +52,108 @@ for (const id of [
   assert.equal(isFlashModel(id), false, `${String(id)} 不应命中 DeepSeek Flash`)
 }
 
+// 家族判定：四分支，只按 id
+assert.equal(modelFamily('deepseek-v4-flash'), 'flash')
+assert.equal(modelFamily('deepseek-v4-pro'), 'deepseek')
+assert.equal(modelFamily('auto/longcat-2.0'), 'longcat')
+assert.equal(modelFamily('longcat-2/LongCat-2.0'), 'longcat')
+assert.equal(modelFamily('LongCat-2.5'), 'longcat')
+assert.equal(modelFamily('gemini-2.5-flash'), 'third-party')
+assert.equal(modelFamily('kimi-k2.5'), 'third-party')
+assert.equal(modelFamily(undefined), 'third-party')
+assert.equal(isDeepSeekModel('deepseek-v4-pro'), true)
+assert.equal(isDeepSeekModel('gemini-2.5-flash'), false)
+assert.equal(isLongCatModel('longcat-2.0'), true)
+assert.equal(isLongCatModel('deepseek-v4-flash'), false)
+
 const weakFlash = personaFor('weak', 'deepseek-v4-flash')
 assert.ok(weakFlash.includes('Before acting, decide the task type'))
 assert.ok(weakFlash.includes('Think deeply about the architecture'))
 assert.ok(weakFlash.includes('Do not run environment checks'))
 assert.notEqual(weakFlash, personaFor('weak', 'deepseek-v4-pro'), 'pro 与 flash 的 weak persona 必须不同')
+
+const weakLongCat = personaFor('weak', 'auto/longcat-2.0')
+assert.ok(weakLongCat.includes('strong reasoning capability'))
+assert.ok(weakLongCat.includes('Direct production anchor'))
+assert.ok(weakLongCat.includes('Single verification anchor'))
+
+// 幂等反刍拦截测试
+assert.equal(isRedundantVerification({ exitCode: 0 }, { tool: 'bash', args: { command: 'python3 test_processor.py' } }), true)
+assert.equal(isRedundantVerification({ exitCode: 0 }, { tool: 'bash', args: { command: 'python3 -m unittest test' } }), true)
+assert.equal(isRedundantVerification({ exitCode: 1 }, { tool: 'bash', args: { command: 'python3 test.py' } }), false)
+assert.equal(isRedundantVerification({ exitCode: 0 }, { tool: 'write', args: { path: 'a.py' } }), false)
+
+// --- 1.1 HarnessMM 决策卫述判定 (GDR) 与回调置换 (CCS) 单元测试 -------------
+// 5 种标准物理卫述测试
+// 1) return_code
+assert.equal(evaluateGuard({ return_code: 0 }, { return_code: 0 }), true)
+assert.equal(evaluateGuard({ return_code: 0 }, { return_code: 1 }), false)
+// 2) stdout_contains
+assert.equal(evaluateGuard({ stdout_contains: 'PASSED' }, { stdout: 'tests: 5 PASSED in 0.1s' }), true)
+assert.equal(evaluateGuard({ stdout_contains: 'PASSED' }, { stdout: 'tests: 1 FAILED' }), false)
+// 3) stdout_equals
+assert.equal(evaluateGuard({ stdout_equals: 'OK' }, { stdout: 'OK\n' }), true)
+assert.equal(evaluateGuard({ stdout_equals: 'OK' }, { stdout: 'ERROR' }), false)
+// 4) stderr_empty
+assert.equal(evaluateGuard({ stderr_empty: true }, { stderr: '' }), true)
+assert.equal(evaluateGuard({ stderr_empty: true }, { stderr: 'Traceback...' }), false)
+// 5) json_equals
+assert.equal(evaluateGuard({ json_equals: { path: ['result', 'code'], value: 200 } }, { stdout: JSON.stringify({ result: { code: 200 } }) }), true)
+assert.equal(evaluateGuard({ json_equals: { path: ['result', 'code'], value: 200 } }, { stdout: JSON.stringify({ result: { code: 500 } }) }), false)
+
+// 兼容测试
+assert.equal(evaluateGuard({ condition: 'status == success' }, { status: 'success' }), true)
+assert.equal(evaluateGuard({ condition: 'status == success' }, { status: 'failed', isError: true }), false)
+assert.equal(evaluateGuard({ exitCode: 0 }, { exitCode: 0 }), true)
+assert.equal(evaluateGuard({ exitCode: 0 }, { exitCode: 1 }), false)
+
+// 1.2 多步决策链调度器 (ChiselPlanScheduler) 单元测试
+const scheduler = new ChiselPlanScheduler('session-dag-01')
+const dagCandidates = [
+  { action: { tool: 'write', args: { path: 'b.py' } }, guard: { status: 'success' } },
+  { action: { tool: 'bash', args: { command: 'pytest b.py' } }, guard: { return_code: 0 } },
+]
+scheduler.loadCandidates(dagCandidates)
+assert.equal(scheduler.hasPending(), true)
+
+// 步骤 1：成功完成，推进到动作 1
+const act1 = scheduler.step({ status: 'success' })
+assert.equal(act1.tool, 'write')
+assert.equal(scheduler.hasPending(), true)
+
+// 步骤 2：成功完成，推进到动作 2
+const act2 = scheduler.step({ return_code: 0 })
+assert.equal(act2.tool, 'bash')
+assert.equal(scheduler.hasPending(), false)
+
+// 队列耗尽后安全返回 null
+const act3 = scheduler.step({ return_code: 0 })
+assert.equal(act3, null)
+
+// 异常打断测试：若中间某步卫述未通过，队列立即被清空并安全回退
+scheduler.loadCandidates(dagCandidates)
+const failStep = scheduler.step({ return_code: 1, isError: true })
+assert.equal(failStep, null)
+assert.equal(scheduler.hasPending(), false, '卫述失败后队列必须安全清空')
+
+const validCandidate = {
+  action: { tool: 'bash', args: { command: 'pytest' } },
+  guard: { condition: 'status == success' },
+}
+assert.equal(shouldBypassCallback({ status: 'success' }, validCandidate), true)
+assert.equal(shouldBypassCallback({ status: 'error', isError: true }, validCandidate), false)
+assert.equal(shouldBypassCallback({ status: 'success' }, null), false)
+assert.equal(shouldBypassCallback({ status: 'success' }, { action: null }), false)
+
+const cert = createSubstitutionCertificate({
+  sessionId: 'test-session',
+  modelId: 'deepseek-v4-flash',
+  bypassedTool: 'bash',
+  receipt: { status: 'success' },
+  estimatedTokens: 15000,
+})
+assert.equal(cert.kind, 'harnessmm/substitution-certificate')
+assert.equal(cert.estimatedTokensSaved, 15000)
 
 // --- 2. persona 原位替换 ----------------------------------------------------
 const sections = [
@@ -76,13 +177,13 @@ assert.equal(applyPersona([{ name: 'a', text: 'A' }], 'NEW')[0].text, 'NEW')
 const ALL_TOOLS = ['read', 'write', 'edit', 'glob', 'grep', 'bash'].map((name) => ({ name }))
 
 /** 以指定 model 与事件日志驱动一次 system-prompt/assemble。 */
-async function assemble({ model, events = [], tools = ALL_TOOLS, warnings = [] }) {
+async function assemble({ model, events = [], tools = ALL_TOOLS, warnings = [], config = {}, omitTools = false }) {
   const listeners = []
   const ctx = {
-    on: (_event, handler) => listeners.push(handler),
+    on: (event, handler) => listeners.push({ event, handler }),
     logger: { warn: (message) => warnings.push(message) },
   }
-  apply(ctx, {})
+  apply(ctx, config)
 
   const agent = {
     options: { model },
@@ -91,11 +192,12 @@ async function assemble({ model, events = [], tools = ALL_TOOLS, warnings = [] }
       snapshotEvents: () => events,
     },
   }
-  const call = listeners[0]
+  const call = listeners.find((entry) => entry.event === 'system-prompt/assemble').handler
   return await call({}, { agent }, async () => ({
     sections: sections.map((s) => ({ ...s })),
     contexts: [{ name: 'sandbox:policy', text: 'policy' }],
-    tools: tools.map((t) => ({ ...t })),
+    // 0.2.2+ 宿主：载荷不再携带 tools（工具声明归 provider）。
+    ...(omitTools ? {} : { tools: tools.map((t) => ({ ...t })) }),
     variables: {},
   }))
 }
@@ -123,18 +225,41 @@ assert.equal(
   sessionMode({ snapshotEvents: () => [{ type: 'user/message', data: { content: [{ text: '从零写一个网页游戏' }] } }] }),
   1,
 )
-const nonFlash = await assemble({
+// 第三方家族默认：人设仍按关键词分类（0.4.1 行为不变），但首轮不再收窄。
+const thirdParty = await assemble({
   model: 'gemini-2.5-flash',
   events: [{ type: 'user/message', data: { content: [{ text: '修复崩溃 bug' }] } }],
 })
-assert.equal(nonFlash.sections[0].text, 'You are a helpful software engineer assistant.',
-  'spec 带用最小 persona；同名 flash 的其他家族不得套 DeepSeek 弱 persona')
-assert.equal(nonFlash.tools.map((t) => t.name).join(','), 'read,edit,glob,grep,bash',
-  'spec 带核心工具面 = read/edit/glob/grep + shell')
+assert.equal(thirdParty.sections[0].text, 'You are a helpful software engineer assistant.',
+  '第三方默认策略下 persona 仍是分类结果（spec 档）')
+assert.equal(thirdParty.tools.length, ALL_TOOLS.length,
+  '第三方默认也放开首轮工具面：提示词教了 glob/grep，schema 就必须有')
+assert.equal(thirdParty.contexts.length, 0)
+
+// 显式 opt-in 的 neutral：不分类、中性句；工具面同样全量。
+const thirdPartyNeutral = await assemble({
+  model: 'gemini-2.5-flash',
+  events: [{ type: 'user/message', data: { content: [{ text: '修复崩溃 bug' }] } }],
+  config: { thirdPartyGuidance: 'neutral' },
+})
+assert.equal(thirdPartyNeutral.sections[0].text, 'You are a helpful assistant.',
+  'neutral 策略：不被关键词分类改写')
+assert.equal(thirdPartyNeutral.tools.length, ALL_TOOLS.length,
+  'neutral 策略同样不收窄首轮工具面')
 
 const nonFlashPro = await assemble({ model: 'deepseek-v4-pro' })
 assert.notEqual(nonFlashPro.sections[0].text, personaFor('weak', 'deepseek-v4-flash'),
   'deepseek-v4-pro 不算 flash')
+assert.equal(nonFlashPro.sections[0].text, personaFor('weak', 'deepseek-v4-pro'),
+  'DeepSeek 非 Flash 仍走关键词分类（weak 档 = w6）')
+
+const proSpec = await assemble({
+  model: 'deepseek-v4-pro',
+  events: [{ type: 'user/message', data: { content: [{ text: '修复崩溃 bug' }] } }],
+})
+assert.equal(proSpec.sections[0].text, 'You are a helpful software engineer assistant.',
+  'DeepSeek 非 Flash 的 spec 档保持不变')
+assert.equal(proSpec.tools.map((t) => t.name).join(','), 'read,edit,glob,grep,bash')
 
 // --- 6. 不依赖已移除的 session.events -------------------------------------
 let touchedLegacy = false
@@ -149,8 +274,9 @@ Object.defineProperty(legacySession, 'events', {
   },
 })
 const listeners = []
-apply({ on: (_e, h) => listeners.push(h), logger: { warn: () => {} } }, {})
-await listeners[0]({}, { agent: { options: { model: 'deepseek-v4-flash' }, session: legacySession } },
+apply({ on: (event, handler) => listeners.push({ event, handler }), logger: { warn: () => {} } }, {})
+await listeners.find((entry) => entry.event === 'system-prompt/assemble').handler(
+  {}, { agent: { options: { model: 'deepseek-v4-flash' }, session: legacySession } },
   async () => ({ sections: [], contexts: [], tools: ALL_TOOLS.map((t) => ({ ...t })), variables: {} }))
 assert.equal(touchedLegacy, false, '不得再读 session.events')
 
@@ -179,7 +305,7 @@ const HOST_DELEGATED_ROWS = [
   'tool-bash', 'tool-pwsh', 'tool-jobs', 'tool-fs', 'tool-fs-search',
   'skill-filesystem', 'tool-skill', 'tool-goal', 'plan-mode',
   'compaction-basic', 'command-compact', 'tool-result-pruner',
-  'tool-subagent-control', 'tool-subagent-list-agents', 'tool-subagent',
+  'tool-subagent-control', 'tool-subagent',
   'tool-subagent-fork', 'workflow-ptc', 'tool-workflow', 'tool-ralph',
   'agent-instructions', 'tool-todo', 'tool-web',
 ]
@@ -245,5 +371,64 @@ const neutral = personaFor('weak', 'deepseek-v4-flash', { flashGuidance: false }
 assert.equal(neutral, 'You are a helpful assistant.', 'flashGuidance:false 必须退回中性句')
 assert.notEqual(neutral, personaFor(0, 'deepseek-v4-pro'),
   '不得退回 spec 句：P11 实测它对 Flash 是反向路由')
+
+// --- 11. 0.2.2+ 宿主：assemble 载荷没有 tools，收窄改走 tools.restrict ------
+// 0.2.2-alpha.2 起 system-prompt/assemble 只交 PromptPresentation，工具声明归
+// provider。此前这里读 `assembled.tools.map(...)` 抛 TypeError，整轮请求直接失败
+// （web 会话：turn/start 后 8ms 报 Cannot read properties of undefined）。
+const payloadWithoutTools = await assemble({ model: 'deepseek-v4-flash', omitTools: true })
+assert.equal(payloadWithoutTools.tools, undefined,
+  '0.2.2+ 载荷没有 tools 时不得写入（工具声明归 provider）')
+assert.ok(payloadWithoutTools.sections[0].text.startsWith('You are a helpful assistant.'),
+  '人设替换照旧生效')
+assert.equal(payloadWithoutTools.contexts.length, 0)
+
+// 收窄路径：agent/created 时用 agent.ctx.tools.restrict({allow}) 登记，
+// 首次工具结果（tools/result）后解除。
+const events = new Map()
+const restrictFilters = []
+let lifts = 0
+const fakeTools = {
+  restrict: (filter) => {
+    restrictFilters.push([...filter.allow])
+    return () => { lifts += 1 }
+  },
+  get: (tool) => (['read', 'write', 'edit', 'glob', 'grep', 'bash'].includes(tool) ? { name: tool } : undefined),
+}
+apply({
+  on: (event, handler) => {
+    if (!events.has(event)) events.set(event, [])
+    events.get(event).push(handler)
+  },
+  logger: { warn: () => {} },
+  tools: fakeTools,
+}, {})
+const restrictAgent = {
+  options: { model: 'deepseek-v4-flash' },
+  model: { current: () => ({ provider: 'deepseek-official', model: 'deepseek-v4-flash' }) },
+  session: { id: 'session-restrict', snapshotEvents: () => [] },
+  ctx: { tools: fakeTools },
+}
+for (const handler of events.get('agent/created') ?? []) handler({ agent: restrictAgent })
+assert.deepEqual(restrictFilters[0], ['read', 'write', 'edit', 'bash'],
+  '0.2.2+ 首轮收窄 = weak core + 平台 shell（经 tools.restrict）')
+for (const handler of events.get('tools/result') ?? []) handler({ agent: restrictAgent })
+assert.equal(lifts, 1, '首次工具结果后解除收窄')
+
+// 第三方模型不登记收窄；已有 tool/call 的会话也不登记。
+restrictFilters.length = 0
+const thirdPartyAgent = {
+  ...restrictAgent,
+  options: { model: 'gemini-2.5-flash' },
+  model: { current: () => ({ provider: 'g', model: 'gemini-2.5-flash' }) },
+}
+for (const handler of events.get('agent/created') ?? []) handler({ agent: thirdPartyAgent })
+assert.equal(restrictFilters.length, 0, '第三方模型首轮不收窄')
+const promotedAgent = {
+  ...restrictAgent,
+  session: { id: 'session-promoted', snapshotEvents: () => [{ type: 'tool/call' }] },
+}
+for (const handler of events.get('agent/created') ?? []) handler({ agent: promotedAgent })
+assert.equal(restrictFilters.length, 0, '已有 tool/call 的会话不再收窄')
 
 console.log('router-flash preset: all checks passed')

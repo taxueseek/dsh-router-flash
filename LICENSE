@@ -3,6 +3,11 @@ MIT License
 Copyright (c) 2026 yjh051108
 Copyright (c) 2026 taxueseek
 
+This repository is distributed under the MIT License, except that the
+HarnessMM-derived decision-reuse portions of `lib/router-core.mjs` and
+`lib/router-bootstrap.mjs` remain available under the Apache License 2.0
+(see `LICENSE-APACHE-2.0` and `NOTICE-HarnessMM`).
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights

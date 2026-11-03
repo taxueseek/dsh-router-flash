@@ -92,6 +92,11 @@
               # 用来做「引导是否有害」的对照——P21 记录过它在连续任务链上的负收益。
               # 注意不能退回 SPEC 句：P11 实测那对 Flash 是反向路由。
               flashGuidance: true
+              # 非 DeepSeek 家族（gemini / qwen / gpt / LongCat …）的人设策略：
+              # 'classify'（默认，与 0.4.1 一致）= 首条消息关键词分类；
+              # 'neutral'（可选）= 中性句，尚无对照测量，不做默认。
+              # 两种策略都不再收窄首轮工具面（旧行为在 13/13 会话上造成提示词与 schema 不一致）。
+              thirdPartyGuidance: classify
 
           # ── shell ───────────────────────────────────────────────────────────────────
 
@@ -259,11 +264,11 @@
             isolate:
               workflowEngine: true
             config:
+              # 0.2.2-alpha.2 起主入口同时注册 list_agents / send_message /
+              # interrupt_agent，并删除 `./list-agents` 子路径导出；旧版单独挂的
+              # `tool-subagent-list-agents` 行已删（旧宿主上该工具不再存在）。
               - id: tool-subagent-control
                 name: '@deepseek-ai/dsh-tool-subagent-control'
-
-              - id: tool-subagent-list-agents
-                name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 
               - id: tool-subagent
                 name: '@deepseek-ai/dsh-tool-subagent'

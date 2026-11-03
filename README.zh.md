@@ -54,9 +54,11 @@ dsh 网页端里模型无关的 agent preset——只看模型 id，首轮收窄
 
 - **任何渠道**——命中只看模型 id，不看谁在转卖。任何提供 DeepSeek V4 Flash 的渠道
   都拿到同一套引导。
-- **任何模型**——不命中 `isFlashModel` 的模型仍能用本 preset 的通用分支：首条用户消息的
-  关键词分类（build/fix）决定路由。所以 `deepseek-v4-pro`、`gemini-2.5-flash`、
-  `qwen3-flash`、`gpt-5-flash` 等等都能用「探索模式」。
+- **任何模型，但不是同一套引导**——模型 id 分四个家族，各走各的：
+  `flash`（DeepSeek + flash）拿 w7 + 首轮收窄；`deepseek` 其余家族拿 w6 关键词分类
+  + 首轮收窄；`longcat` 拿龙猫专属长上下文人设 + 首轮收窄；
+  `third-party`（gemini / qwen / gpt …）**不收窄首轮**；人设默认仍按关键词
+  分类，中性句是 opt-in（`thirdPartyGuidance: neutral`）。
 - **一份 preset 服务所有模型**——同一份声明行服务每个模型，路由器按会话自适应，
   不需要每个厂商配一份 preset。
 
@@ -69,16 +71,24 @@ dsh 网页端里模型无关的 agent preset——只看模型 id，首轮收窄
 isFlashModel(modelId) = /deepseek/i.test(modelId) && /flash/i.test(modelId)
 ```
 
-| 模型 id | 命中 | 路由 |
+家族判定（`modelFamily()`）只看 id，四档：
+
+| 模型 id | 家族 | 路由 |
 |---|---|---|
-| `deepseek-v4-flash` | 是 | weak（w7 引导，本 preset 的主体） |
-| `deepseek-v4-flash-0731`、`deepseek-v4-flash-vision-exp` | 是 | weak |
-| `deepseek-v4-pro`、`deepseek-chat` | 否 | 首条用户消息关键词分类（build/fix） |
-| `gemini-2.5-flash`、`qwen3-flash`、`gpt-5-flash` | 否 | 同上 |
+| `deepseek-v4-flash`、`deepseek-v4-flash-0731`、`deepseek-v4-flash-vision-exp` | `flash` | w7 引导 + 首轮收窄（本 preset 的主体） |
+| `deepseek-v4-pro`、`deepseek-chat` | `deepseek` | 首条用户消息关键词分类（build/fix）+ 首轮收窄 |
+| `LongCat-*`、`longcat-*` | `longcat` | 龙猫专属长上下文人设（`WEAK_LONGCAT`）+ 首轮收窄 |
+| `gemini-2.5-flash`、`qwen3-flash`、`gpt-5-flash` | `third-party` | 关键词分类（默认）或中性句（opt-in）；**不收窄首轮** |
+
+**第三方只改了一处，因为只有这一处有测量**：首轮收窄会让提示词继续教 `glob`/`grep`
+怎么用，而 schema 里没有这两个工具。在本机 13 个历史第三方会话里，这个不一致 **13/13
+全部复现**（`scripts/replay-routing.mjs` 可复跑），所以第三方家族一律放开首轮目录。
+
+人设没动：w6 与 w7 都只在 DeepSeek 家族上测过，拿不到对照结论就不改默认。想要中性句
+（不分类）可显式设 `thirdPartyGuidance: neutral`，等对照测量出来再谈默认值。
 
 **为什么不是只匹配 `flash`**：那样会把 `gemini-2.5-flash`、`qwen3-flash` 这类非
-DeepSeek 模型一起卷进本 preset 的弱 persona，对它们是负优化。未命中的模型仍能用本
-preset，只是走通用分类分支。
+DeepSeek 模型一起卷进 Flash 的弱 persona，对它们是负优化。
 
 **为什么不是绑定 `opencode-go`**：模型能力取决于模型本身，不取决于谁在转卖它。任何
 渠道的 DeepSeek V4 Flash 都该拿到同一套引导；渠道差异用 `provider` 配置表达，不进
@@ -96,7 +106,7 @@ curl -fsSL https://raw.githubusercontent.com/taxueseek/dsh-router-flash/main/ins
 等价手工操作：
 
 ```sh
-dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
+dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.5.0
 # 重启 DSH
 ```
 
@@ -122,7 +132,7 @@ dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
 ## 升级
 
 ```sh
-dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.4.1
+dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.5.0
 ```
 
 重启 DSH 后声明行随补丁层换新，**没有需要覆盖的用户目录**。
@@ -146,8 +156,8 @@ dsh plugin --profile web remove dsh-router-flash
 1. 安装后重启 dsh，在新会话的预设选择器里选「探索模式」。
 2. 直接提交任务即可。persona 会自动注入「分类 + 回顾 + 反跑题 + 深度思考 + 决策闭环」
    五个锚。**注意口径**：对 DeepSeek Flash，代码层不判任务类型——一律 weak 分支，
-   分类由模型按 persona 里那句自己判；`classifyTask()` 的关键词分类只服务非 Flash
-   模型。
+   分类由模型按 persona 里那句自己判；`classifyTask()` 的关键词分类只服务 DeepSeek
+   非 Flash 家族。第三方模型默认不分类，拿中性句（见「命中规则」）。
 3. 会话启动后，模型的 system prompt 应包含：
 
    ```
@@ -176,7 +186,8 @@ dsh plugin --profile web remove dsh-router-flash
 
 | dsh-router-flash | Harness | 说明 |
 | --- | --- | --- |
-| 0.4.1 | **0.2.1-rc.1（当前，在跑）** | 补回 `time-context` + `tool-schedule`，对齐 `plan-mode` 文案，修一处不可达的 `FLASH_NEUTRAL` 抛出；组合漂移 12/12 全部有理由。 |
+| 0.5.0 | **0.2.1-rc.5（latest）** / 0.2.2-alpha.2（alpha） | 适配 0.2.2-alpha.2：删掉已移除的 `tool-subagent-control/list-agents` 行、不再读 `assembled.tools`（改用 `ctx.tools.restrict()`）；第三方模型首轮不再收窄；新增 `thirdPartyGuidance`。 |
+| 0.4.1 | 0.2.1-rc.1 | 补回 `time-context` + `tool-schedule`，对齐 `plan-mode` 文案，修一处不可达的 `FLASH_NEUTRAL` 抛出；组合漂移 12/12 全部有理由。 |
 | 0.4.0 | 0.2.0-rc.2（实测） | 破坏性：preset 改为声明行交付，不再落盘同步。 |
 | 0.3.1 | 0.1.5-rc.2（历史） | 目录形态 preset——在 0.2.0-rc.2 上**等于不存在**。 |
 
@@ -200,6 +211,7 @@ bundle 条目不带宿主侧 `config` 段。唯一的开关在声明行本身：
 | 键 | 默认 | 作用 |
 |---|---|---|
 | `flashGuidance` | `true` | 置 `false` 时 Flash 模型拿到中性 persona 句，而不是 w7 引导。永远不会退回 spec 句。 |
+| `thirdPartyGuidance` | `classify` | 第三方家族的人设策略。`classify`：首条消息关键词分类（0.4.1 行为）；`neutral`：中性句、不分类（opt-in，尚无对照测量）。两种策略都不收窄首轮工具面。DeepSeek 家族不受影响。 |
 
 按 Loader 行 id 在 profile 的 `cordis.patch.yml` 里覆盖：
 
@@ -443,8 +455,10 @@ preset 文件。
 ## 适用范围
 
 - 命中 `isFlashModel` 后一律走 weak 模式（作者实测 w7 最优解）。
-- 非 DeepSeek Flash 模型（如 `deepseek-v4-pro`、`gemini-2.5-flash`）走关键词分类逻辑，
-  仍可用。
+- DeepSeek 非 Flash 模型（如 `deepseek-v4-pro`）走关键词分类逻辑，仍可用。
+- 第三方模型（如 `gemini-2.5-flash`）默认仍按首条消息分类，但不收窄
+  首轮；中性句是 opt-in（`thirdPartyGuidance: neutral`）。LongCat 系 id 另成
+  `longcat` 家族，配龙猫专属长上下文人设。
 - 复杂构建任务（如大型工程、从零开发）尤其受益于深度思考锚。
 
 ## 包结构
@@ -490,10 +504,12 @@ dsh-router-flash/
 | [SheberDavid/v4-flash-godmode-opencode-go](https://github.com/SheberDavid/v4-flash-godmode-opencode-go) | SheberDavid | 无独立 LICENSE（其 README 声明基于 MIT 项目） | `presets/` 组合本体与 dsh rc.6 适配逻辑的直接来源 |
 | [dsh-router-standard](https://github.com/yjh051108/dsh-router-standard) | yjh051108 | MIT（© 2026 yjh051108） | Flash w7 persona、深度思考锚与路由研究的源头 |
 | [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite) | yjh051108 | MIT | 路由研究 |
+| [HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM) | PhiAgent-0 contributors | Apache-2.0（© 2026 PhiAgent-0 contributors） | GDR/CCS 决策重用逻辑（`evaluateGuard`、`ChiselPlanScheduler`、置换凭证）的来源 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek | MIT | 宿主框架 |
 
 本仓库新增的 bundle 包装层（`package.json` / `cordis.patch.yml` / `presets/` / `lib/` /
-`scripts/`）为本仓库独立新增代码。
+`scripts/`）为本仓库独立新增代码，但 `lib/` 中的 HarnessMM 派生决策重用逻辑除外
+（见上表）。
 
 完整许可与衍生链说明见 [LICENSE](./LICENSE) 与 [NOTICE](./NOTICE)。DeepSeek 是
 DeepSeek 公司商标；本项目为社区产物，与 DeepSeek 无关联。

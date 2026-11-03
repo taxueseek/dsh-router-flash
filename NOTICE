@@ -16,6 +16,16 @@ ecosystem and on prior open work:
   `lib/client.js`, `package.json`, `cordis.patch.yml`, `install.sh`,
   `scripts/`, `test/`) is new code contributed by taxueseek under
   the MIT License, sharing the same copyright notice as this repository.
+- The decision-reuse logic in `lib/router-core.mjs` (`evaluateGuard`,
+  `shouldBypassCallback`, `ChiselPlanScheduler`,
+  `createSubstitutionCertificate`, `isRedundantVerification`) and its
+  wiring in `lib/router-bootstrap.mjs` are derived from
+  **YuhuaJiang2002/HarnessMM** (Apache License 2.0, Copyright (c) 2026
+  PhiAgent-0 contributors). Those parts remain available under Apache-2.0;
+  the original copyright, license and NOTICE are reproduced in
+  `LICENSE-APACHE-2.0` and `NOTICE-HarnessMM`. Changes: re-implemented as
+  framework-agnostic JavaScript, renamed the certificate kind to
+  `harnessmm/*`, and wired it to DSH's `tools/result` seam.
 
 DeepSeek is a trademark of DeepSeek. This project is a community artifact
 and is not endorsed by DeepSeek.
