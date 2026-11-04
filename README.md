@@ -1,13 +1,13 @@
 <div align="center">
 
-[English](README.md) | [简体中文](README.zh.md)
+[English](README.en.md) | 简体中文
 
 </div>
 
 # dsh-router-flash
 
 <div align="center">
-  <img src="intro.png" alt="dsh-router-flash overview: channel-agnostic model match, narrowed first-turn tool face, declaration-row delivery" width="720" />
+  <img src="intro.png" alt="dsh-router-flash 总览：渠道无关命中、首轮工具面收窄、声明行交付" width="720" />
 </div>
 
 ## 实际效果 / Actual UI
@@ -15,120 +15,131 @@
 **预设选择器 / Preset Picker**
 
 <div align="center">
-  <img src="ui-preset-picker.png" alt="Preset picker: 探索模式 selected, with description and the other built-in presets" width="720" />
+  <img src="ui-preset-picker.png" alt="预设选择器：选中「探索模式」，含描述与其他内建预设" width="720" />
 </div>
 
 **首轮工具面 / First-turn Tool Face**
 
 <div align="center">
-  <img src="ui-first-turn-tools.png" alt="First turn exposes read/write/edit plus the platform shell; the full 29-row catalog opens after the first tool call" width="720" />
+  <img src="ui-first-turn-tools.png" alt="首轮只给 read/write/edit 加平台 shell，首次工具调用后放开 28 行全目录" width="720" />
 </div>
 
-## In one line
+## 一句话
 
-A model-agnostic agent preset for the dsh web GUI — matches on the model id
-alone, narrows the first turn's tool face, then gets out of the way. Built for
-DeepSeek V4 Flash, usable with any model.
+dsh 网页端里模型无关的 agent preset——只看模型 id，首轮收窄工具面，之后就不再多管。
+为 DeepSeek V4 Flash 而生，但不限于它。
 
-## What it is
+## 这是什么
 
-A dsh **agent preset** delivered as a bundle patch layer. Installing the
-plugin declares one `@deepseek-ai/dsh-agent-preset` row; restart dsh and
-「探索模式」 appears in the preset picker. **Nothing is written to disk** — since
-DSH 0.2.0 the preset is a plugin row, not a directory.
+一个以 bundle 补丁层交付的 dsh **agent preset**。安装插件即声明一条
+`@deepseek-ai/dsh-agent-preset` 行；重启 dsh 后「探索模式」出现在预设选择器里。
+**没有任何落盘同步**——DSH 0.2.0 起 preset 是插件行，不是目录。
 
-What it does:
+它做的事：
 
-| Stage | Behaviour |
+| 阶段 | 行为 |
 |---|---|
-| **Match** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)` — model- and channel-agnostic |
-| **Persona** | For Flash, always the weak branch (w7 guidance): classify, review, stay on topic, think deeply, close the loop |
-| **First turn** | Only `read` / `write` / `edit` plus the platform shell (`bash`, or `pwsh` on Windows) |
-| **After the first `tool/call`** | The full 29-row catalog opens and the router stops touching anything |
+| **命中** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)`，模型与渠道都无关；`modelFamily()` 把 id 分成 `flash` / `deepseek` / `longcat` / `third-party` 四家族 |
+| **persona** | 对 Flash 一律 weak 分支（w7 引导）：分类、回顾、反跑题、深度思考、决策闭环 |
+| **首轮** | 只给 `read` / `write` / `edit` 加平台 shell（`bash`，Windows 上是 `pwsh`） |
+| **首次 `tool/call` 之后** | 放开 28 行全目录；路由器还在 `tools/result` 上跑 HarnessMM 链式置换 |
 
-The router hooks the `system-prompt/assemble` seam and rewrites the model
-catalog by turn. Mode derives from durable session events, so resume/reload
-keeps it.
+路由器挂在 `system-prompt/assemble` 接缝上做人设路由。DSH 0.2.2+ 的首轮收窄
+在 `agent/created` 时经 `ctx.tools.restrict()` 登记、首次 `tools/result` 后解除；
+旧宿主上 assemble 载荷仍带 `tools`，过滤在那里跑。模式由持久会话事件推导，
+所以 resume / reload 之后仍然保持。
 
-## Model-agnostic by design
+## 模型无关，是演化出来的分支
 
-This preset is the evolved branch of the earlier `dsh-router-flash` (v0.1.0,
-which was bound to a single provider's DeepSeek V4 Flash). The routing was
-rebuilt so the preset is **not tied to one vendor or model family**:
+本 preset 是早期 `dsh-router-flash`（v0.1.0，绑定单一渠道的 DeepSeek V4 Flash）演化
+出来的分支。路由逻辑重做后，**不再绑定某个厂商或模型家族**：
 
-- **Any channel** — the match is on the model id, not on who resells it. Any
-  provider serving DeepSeek V4 Flash gets the same guidance.
-- **Any model, but not the same guidance** — ids map to four families:
-  `flash` (DeepSeek + flash) gets w7 plus first-turn narrowing; other DeepSeek
-  models get w6 keyword classification plus narrowing; `longcat` gets its own
-  long-context persona plus narrowing; `third-party` models (gemini, qwen,
-  gpt, …) no longer narrow the first turn, while their persona still follows
-  keyword classification by default (neutral is opt-in).
-- **One preset, many models** — the same declaration row serves every model;
-  the router adapts per session instead of needing a preset per vendor.
+- **任何渠道**——命中只看模型 id，不看谁在转卖。任何提供 DeepSeek V4 Flash 的渠道
+  都拿到同一套引导。
+- **任何模型，但不是同一套引导**——模型 id 分四个家族，各走各的：
+  `flash`（DeepSeek + flash）拿 w7 + 首轮收窄；`deepseek` 其余家族拿 w6 关键词分类
+  + 首轮收窄；`longcat` 拿龙猫专属长上下文人设 + 首轮收窄；
+  `third-party`（gemini / qwen / gpt …）**不收窄首轮**；人设默认仍按关键词
+  分类，中性句是 opt-in（`thirdPartyGuidance: neutral`）。
+- **一份 preset 服务所有模型**——同一份声明行服务每个模型，路由器按会话自适应，
+  不需要每个厂商配一份 preset。
 
-This is the extensibility gain: adding a new model or channel needs no preset
-change — only the model id and (for routing) the provider config.
+这就是扩展性收益：新增模型或渠道不需要改 preset——只要模型 id 命中（以及路由里的
+`provider` 配置）。
 
-## Match rule (model- and channel-agnostic)
+## 命中规则（模型与渠道都无关）
 
 ```
 isFlashModel(modelId) = /deepseek/i.test(modelId) && /flash/i.test(modelId)
 ```
 
-`modelFamily()` reads the id only:
+家族判定（`modelFamily()`）只看 id，四档：
 
-| Model id | Family | Route |
+| 模型 id | 家族 | 路由 |
 |---|---|---|
-| `deepseek-v4-flash`, `deepseek-v4-flash-0731`, `deepseek-v4-flash-vision-exp` | `flash` | w7 guidance + first-turn narrowing (this preset's main path) |
-| `deepseek-v4-pro`, `deepseek-chat` | `deepseek` | keyword classification of the first user message (build/fix) + first-turn narrowing |
-| `LongCat-*`, `longcat-*` | `longcat` | long-context persona (`WEAK_LONGCAT`) + first-turn narrowing |
-| `gemini-2.5-flash`, `qwen3-flash`, `gpt-5-flash` | `third-party` | keyword classification by default, neutral opt-in; **no first-turn narrowing** |
+| `deepseek-v4-flash`、`deepseek-v4-flash-0731`、`deepseek-v4-flash-vision-exp` | `flash` | w7 引导 + 首轮收窄（本 preset 的主体） |
+| `deepseek-v4-pro`、`deepseek-chat` | `deepseek` | 首条用户消息关键词分类（build/fix）+ 首轮收窄 |
+| `LongCat-*`、`longcat-*` | `longcat` | 龙猫专属长上下文人设（`WEAK_LONGCAT`）+ 首轮收窄 |
+| `gemini-2.5-flash`、`qwen3-flash`、`gpt-5-flash` | `third-party` | 关键词分类（默认）或中性句（opt-in）；**不收窄首轮** |
 
-**Only one third-party behaviour changed, because only one was measured**: the
-narrowed first turn kept the prompt explaining `glob`/`grep` while the schema
-carried neither. That mismatch reproduced in **13 of 13** historical
-third-party sessions on this machine (`scripts/replay-routing.mjs` replays
-them), so third-party models now always get the full catalog. The persona is
-untouched: w6 and w7 were measured only on DeepSeek models, so the default
-stays `classify`; `thirdPartyGuidance: neutral` is available for a measured
-A/B, not as a new default.
+**第三方只改了一处，因为只有这一处有测量**：首轮收窄会让提示词继续教 `glob`/`grep`
+怎么用，而 schema 里没有这两个工具。在本机 13 个历史第三方会话里，这个不一致 **13/13
+全部复现**（`scripts/replay-routing.mjs` 可复跑），所以第三方家族一律放开首轮目录。
 
-**Why not match `flash` alone**: that would drag non-DeepSeek models
-(`gemini-2.5-flash`, `qwen3-flash`) into this preset's weak persona, which is a
-negative optimisation for them.
+人设没动：w6 与 w7 都只在 DeepSeek 家族上测过，拿不到对照结论就不改默认。想要中性句
+（不分类）可显式设 `thirdPartyGuidance: neutral`，等对照测量出来再谈默认值。
 
-**Why not bind to `opencode-go`**: a model's capability comes from the model,
-not from who resells it. Any channel's DeepSeek V4 Flash should get the same
-guidance; channel differences belong in the `provider` config, not the preset.
+**为什么不是只匹配 `flash`**：那样会把 `gemini-2.5-flash`、`qwen3-flash` 这类非
+DeepSeek 模型一起卷进 Flash 的弱 persona，对它们是负优化。
 
-## Install
+**为什么不是绑定 `opencode-go`**：模型能力取决于模型本身，不取决于谁在转卖它。任何
+渠道的 DeepSeek V4 Flash 都该拿到同一套引导；渠道差异用 `provider` 配置表达，不进
+preset。
 
-Requires harness ≥ 0.2.0-rc.2 (verified on 0.2.0-rc.2; also running on
-0.2.1-rc.1).
+## HarnessMM 决策重用（GDR / CCS）
+
+`lib/router-core.mjs` 带一层来自 [HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM)（Apache-2.0）
+的确定性决策重用逻辑。模型可以在一次慢思考里声明一小串确定性后续动作，控制器在
+本地连续置换执行，只要每一步的卫述被上一步的收据满足——不必再调一次模型。
+
+| 导出 | 作用 |
+|---|---|
+| `evaluateGuard(guard, receipt)` | 用卫述条件评估工具收据：`return_code` / `exitCode`、`stdout_contains`、`stdout_equals`、`stderr_empty`、`json_equals`、`status == success` |
+| `shouldBypassCallback(receipt, candidate)` | 候选动作的卫述被满足且参数完整（字面闭合）时为真 |
+| `ChiselPlanScheduler` | 每会话的候选节点队列；`step(receipt)` 推进并返回下一个动作，卫述不满足时返回 `null`（安全回退给模型） |
+| `createSubstitutionCertificate(meta)` | 为被置换掉的慢思考调用留审计凭证 |
+| `isRedundantVerification(prevReceipt, currentAction)` | 幂等拦截：上一步测试已通过时，抑制重复跑同一个测试 |
+
+接线在 `lib/router-bootstrap.mjs`：`agent/created` 登记首轮 `tools.restrict()`；
+`tools/result` 解除收窄并把收据喂给调度器。队列由模型自己声明的候选填充——preset
+不发明动作。卫述失败时队列清空，控制权交还模型的正常推理。
+
+这段逻辑是 `LICENSE` / `NOTICE` 里 Apache-2.0 例外的同一部分，见「致谢与来源」。
+
+## 安装
+
+需要 harness ≥ 0.2.0-rc.2（在 0.2.0-rc.2 上实测，0.2.1-rc.1 在跑）。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/taxueseek/dsh-router-flash/main/install.sh | sh
-# restart DSH
+# 重启 DSH
 ```
 
-Manual equivalent:
+等价手工操作：
 
 ```sh
 dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.5.0
-# restart DSH
+# 重启 DSH
 ```
 
-After the restart, the `router-flash` preset shows up in the preset picker
-under the display name 「探索模式」. Then point the model at **any channel's**
-DeepSeek V4 Flash — what goes in `provider` is your channel's business, and
-this preset makes no assumption about it (verified channels below). Model
-routing is configured in the profile's `cordis.patch.yml` on the host's
-`dsh-agent-default-model` row, or picked directly in the GUI's model selector.
-Select 「探索模式」 in a new session.
+重启后 `router-flash` preset 会以显示名「探索模式」出现在预设选择器里。然后把模型指向
+**任意渠道**的 DeepSeek V4 Flash——`provider` 填什么由你的渠道决定，本 preset 不做
+假设（已验证渠道见下）。模型路由在 profile 的 `cordis.patch.yml` 里配宿主
+`dsh-agent-default-model` 行，或直接在界面上的模型选择器里选。新会话选用「探索模式」
+即可。
 
-To make it the **default preset**, override the registry row in the profile's
-`cordis.patch.yml` (the preset's default comes from there):
+想让**默认预设**就是它，在 profile 的 `cordis.patch.yml` 里覆盖注册表那行（preset 的
+默认值由它决定）：
 
 ```yaml
 - id: agent-preset-registry
@@ -137,47 +148,39 @@ To make it the **default preset**, override the registry row in the profile's
     default: router-flash
 ```
 
-> Since 0.2.0, `agent-presets.default` in `~/.dsh/settings.yaml` no longer
-> exists. If you changed it following older docs, that setting is now neither
-> read nor reported — just delete it.
+> 0.2.0 起 `~/.dsh/settings.yaml` 的 `agent-presets.default` 已不存在。若你照着旧
+> 文档改过，那处配置现在既不被读、也不会报错——删掉即可。
 
-## Upgrade
+## 升级
 
 ```sh
 dsh plugin --profile web add -w github:taxueseek/dsh-router-flash#v0.5.0
 ```
 
-After a restart the declaration row is replaced with the patch layer; **there
-is no user directory to overwrite**.
+重启 DSH 后声明行随补丁层换新，**没有需要覆盖的用户目录**。
 
-**The one step unique to 0.3.x → 0.4.0**: 0.3.x synced preset files into
-`~/.dsh/.agent-presets/router-flash/`, a directory that is no longer read on
-0.2.0-rc.2 (see 「Version adaptation」). The plugin checks for it at startup and
-says so in the log; once you have confirmed the upgrade and restarted, you can
-delete it by hand — the plugin itself only does a read-only check and will not
-delete it for you.
+**0.3.x → 0.4.0 的独有一步**：0.3.x 会把 preset 文件同步到
+`~/.dsh/.agent-presets/router-flash/`，那个目录在 0.2.0-rc.2 上已不被读取（详见
+「版本适配」）。插件启动时会检查它并在日志里给出提醒，确认升级完成重启后即可手动
+删除——插件本身只做只读体检，不会替你删。
 
-## Uninstall
+## 卸载
 
 ```sh
 dsh plugin --profile web remove dsh-router-flash
 ```
 
-After a restart the declaration row disappears with the patch layer and the
-preset roster no longer lists it. If a 0.3.x-era directory is still around,
-delete it manually.
+重启后声明行随补丁层一起消失，presets 名册里不再有它。若还有 0.3.x 留下的旧目录，
+需手动删除。
 
-## Usage
+## 使用
 
-1. After installing, restart dsh and pick 「探索模式」 in a new session's preset
-   picker.
-2. Submit your task. The persona injects five anchors automatically —
-   classification, review, staying on topic, deep thinking, closing the loop.
-   **Note the exact behaviour**: for DeepSeek Flash the code does *not*
-   classify the task type — it always takes the weak branch, and the
-   classification is left to the model reading that line in the persona;
-   `classifyTask()`'s keyword classification only serves non-Flash models.
-3. After the session starts, the model's system prompt should contain:
+1. 安装后重启 dsh，在新会话的预设选择器里选「探索模式」。
+2. 直接提交任务即可。persona 会自动注入「分类 + 回顾 + 反跑题 + 深度思考 + 决策闭环」
+   五个锚。**注意口径**：对 DeepSeek Flash，代码层不判任务类型——一律 weak 分支，
+   分类由模型按 persona 里那句自己判；`classifyTask()` 的关键词分类只服务 DeepSeek
+   非 Flash 家族。第三方模型默认不分类，拿中性句（见「命中规则」）。
+3. 会话启动后，模型的 system prompt 应包含：
 
    ```
    You are a helpful assistant.
@@ -188,424 +191,352 @@ delete it manually.
    Produce when your information is complete...
    ```
 
-## Cross-platform support
+## 跨平台支持
 
-The preset is **platform-agnostic**; dsh picks the shell tool automatically:
+本 preset **三平台通用**，dsh 会自动选择 shell 工具：
 
-| OS | shell | Status |
+| 系统 | shell | 状态 |
 |---|---|---|
-| macOS | bash | measured (this round's verification environment) |
-| Linux | bash | not measured; same bash branch |
-| Windows | pwsh (PowerShell) | not measured; the `process.platform === 'win32'` check in `presets/router-flash.patch.yml` disables bash and enables pwsh automatically |
+| macOS | bash | 实测通过（本轮验证环境） |
+| Linux | bash | 未实测；走同一 bash 分支 |
+| Windows | pwsh（PowerShell） | 未实测；`presets/router-flash.patch.yml` 内 `process.platform === 'win32'` 判断会自动禁用 bash、启用 pwsh |
 
-> The core routing logic (persona / guidance / model detection) is
-> OS-independent. A missing shell is no longer fatal: the turn degrades to
-> file tools and logs a warning.
+> 核心路由逻辑（persona / 引导 / 模型识别）与操作系统无关。缺 shell 时不再报错，
+> 退化为文件工具并写警告。
 
-## Compatibility
+## 兼容性
 
-| dsh-router-flash | Harness | Notes |
+| dsh-router-flash | Harness | 说明 |
 | --- | --- | --- |
-| 0.5.0 | **0.2.1-rc.5 (latest)** / 0.2.2-alpha.2 (alpha) | Adapts to 0.2.2-alpha.2: drops the removed `tool-subagent-control/list-agents` row, stops reading `assembled.tools` (now `ctx.tools.restrict()`); third-party models no longer get a narrowed first turn; adds `thirdPartyGuidance`. |
-| 0.4.1 | 0.2.1-rc.1 | Restores `time-context` + `tool-schedule`, aligns `plan-mode` wording, fixes an unreachable `FLASH_NEUTRAL` throw; composition drift 12/12 explained. |
-| 0.4.0 | 0.2.0-rc.2 (measured) | Breaking: preset delivered as a declaration row; no more disk sync. |
-| 0.3.1 | 0.1.5-rc.2 (historical) | Directory-form preset — **does not exist** on 0.2.0-rc.2. |
+| 0.5.0 | **0.2.1-rc.5（latest）** / 0.2.2-alpha.2（alpha） | 适配 0.2.2-alpha.2：删掉已移除的 `tool-subagent-control/list-agents` 行、不再读 `assembled.tools`（改用 `ctx.tools.restrict()`）；第三方模型首轮不再收窄；新增 `thirdPartyGuidance`。 |
+| 0.4.1 | 0.2.1-rc.1 | 补回 `time-context` + `tool-schedule`，对齐 `plan-mode` 文案，修一处不可达的 `FLASH_NEUTRAL` 抛出；组合漂移 13/13 全部有理由。 |
+| 0.4.0 | 0.2.0-rc.2（实测） | 破坏性：preset 改为声明行交付，不再落盘同步。 |
+| 0.3.1 | 0.1.5-rc.2（历史） | 目录形态 preset——在 0.2.0-rc.2 上**等于不存在**。 |
 
-Requires Node.js ≥ 22.19 (the floor this package is developed and tested on).
+需要 Node.js ≥ 22.19。
 
-What was actually checked on 0.2.1-rc.1 (this code):
+在 0.2.1-rc.1 上实际验证过（本代码）：
 
-- **The seams still resolve**: `system-prompt/assemble` is still
-  `(assembly, context, next)` (`dsh-system-prompt:355`); `assembly.sections` /
-  `contexts` / `tools` keep their shape; `session.snapshotEvents()`,
-  `tool/call` and `user/message` event names are unchanged.
-- **`npm test` is 5/5 green** — the composition check compares against the
-  official `standard` preset row by row and requires the difference set to be
-  *exactly* the whitelist (12 entries, each with a stated reason).
-- **The compatibility gate can now see this bundle**: 24 host packages are
-  declared in `peerDependencies` at `^0.2.0-rc.2`. This is not decoration —
-  the host reads it to decide bundle compatibility, and a version mismatch
-  makes it skip this bundle explicitly in the startup log instead of
-  installing it and having nothing take effect (which was 0.3.x's real state
-  on rc.2).
+- **接缝仍在**：`system-prompt/assemble` 仍是 `(assembly, context, next)`
+  （`dsh-system-prompt:355`）；`assembly.sections` / `contexts` / `tools` 形状未变；
+  `session.snapshotEvents()`、`tool/call`、`user/message` 事件名未变。
+- **`npm test` 5/5 绿**——组合体检逐行对照官方 `standard`，要求差异集**恰好等于**
+  白名单（13 条，每条都写了理由）。
+- **兼容门禁看得见本包**：24 个宿主包写进 `peerDependencies`（`^0.2.0-rc.2`）。这不是
+  装饰：宿主按它判定 bundle 兼容性，版本对不上时会在启动日志里明确跳过本 bundle，
+  而不是装上了却一行都不生效（那正是 0.3.x 在 rc.2 上的真实状态）。
 
-## Configuration
+## 配置
 
-The bundle entry carries no host-side `config` block. The one knob lives on
-the declaration row itself:
+bundle 条目不带宿主侧 `config` 段。唯一的开关在声明行本身：
 
-| Key | Default | Effect |
+| 键 | 默认 | 作用 |
 |---|---|---|
-| `flashGuidance` | `true` | When `false`, Flash models get a neutral persona sentence instead of the w7 guidance. The spec sentence is never used as a fallback. |
-| `thirdPartyGuidance` | `classify` | Third-party persona policy. `classify`: keyword classification (0.4.1 behaviour). `neutral`: neutral sentence, no classification (opt-in, not yet measured). Neither narrows the first turn. DeepSeek families are unaffected. |
+| `flashGuidance` | `true` | 置 `false` 时 Flash 模型拿到中性 persona 句，而不是 w7 引导。永远不会退回 spec 句。 |
+| `thirdPartyGuidance` | `classify` | 第三方家族的人设策略。`classify`：首条消息关键词分类（0.4.1 行为）；`neutral`：中性句、不分类（opt-in，尚无对照测量）。两种策略都不收窄首轮工具面。DeepSeek 家族不受影响。 |
 
-Override by Loader row id in the profile's `cordis.patch.yml`:
+按 Loader 行 id 在 profile 的 `cordis.patch.yml` 里覆盖：
 
 ```yaml
 - id: preset-router-flash
   name: '@deepseek-ai/dsh-agent-preset'
-  config: { ...restate the whole config... }   # override is whole-value replacement
+  config: { ...完整重述... }   # 覆盖是整体替换
 ```
 
-> Override replaces the whole value: **omit a field and you lose it**, so
-> restate `id` / `plugins` along with anything you change.
+> 覆盖是整体替换：**漏字段即丢字段**，所以覆盖时要把 `id` / `plugins` 连同你改的
+> 一并重述。
 
-## Dependencies
+## 依赖
 
-- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh)
-  **0.2.0-rc.2 or newer**. This preset is measured on 0.2.0-rc.2 and
-  0.2.1-rc.1; before 0.2.0 presets were directories, which this package no
-  longer supports as of 0.4.0.
-- Any channel's DeepSeek V4 Flash model (id containing `deepseek` + `flash`).
-- Verified channels: `opencode-go` (`https://opencode.ai/zen/go/v1`),
-  `tokenrhythm` (`https://tokenrhythm.studio/v1`). Both share one preset; the
-  only difference is the `provider` value in model routing.
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh）
+  **0.2.0-rc.2 及以上**。本 preset 在 0.2.0-rc.2 与 0.2.1-rc.1 上实测；0.2.0 之前是
+  目录形态的 preset，本包 0.4.0 起不再支持。
+- 任意渠道的 DeepSeek V4 Flash 模型（id 含 `deepseek` + `flash`）。
+- 已验证渠道：`opencode-go`（`https://opencode.ai/zen/go/v1`）、`tokenrhythm`
+  （`https://tokenrhythm.studio/v1`）。两者共用同一套 preset，唯一差异是模型路由里的
+  `provider` 取值。
 
-Zero runtime dependencies: `dependencies` stays empty.
+零运行时依赖：`dependencies` 仍为空。
 
-## Tool face: two kinds of restriction, handled differently
+## 工具面：限制的性质有两种，本 preset 分别处理
 
-`dsh-web-app` (the Web host bundle) sets **23 agent-plane rows to
-`disabled: true`** at the host layer, with the comment **「Presets own the
-human command and model-facing tool」** — covering `tool-web` / `command-goal`
-/ `tool-goal` / `tool-bash` and other model and command entry points. **So in a
-Web deployment, one row a preset omits means that capability simply does not
-exist for that preset's agent.**
+`dsh-web-app`（Web 宿主 bundle）在宿主层把 **23 个 agent 面行设为 `disabled: true`**，
+注释写明 **「Presets own the human command and model-facing tool」**，涵盖 `tool-web`
+/ `command-goal` / `tool-goal` / `tool-bash` … 等模型与命令入口。**所以在 Web 部署里，
+preset 少写一行 = 该能力对该 preset 的 agent 直接不存在。**
 
-That also yields a rule unrelated to "restriction" but just as fatal: **a row
-the host does not declare and only the official presets declare is equally
-absent if this preset does not write it.** 0.4.1 restored two rows on that
-basis — the nature is **closing a gap**, not adding a preference:
+由此还派生一条与「限制」无关、但同样致命的规则：**宿主不声明、只有官方 preset 声明的
+行，本 preset 也不写就等于没有**。0.4.1 据此补回两行，性质是**恢复缺口**，不是口味
+加法：
 
-| Restored row | What actually happens without it | Cost |
+| 补回的行 | 没有它时的实际后果 | 成本 |
 |---|---|---|
-| `time-context` | The model cannot get the current time or timezone and can only guess at "today", "recently", "when was this file changed" | One reading every 10 minutes by default, ~100 characters each — negligible |
-| `tool-schedule` | No `schedule_create/list/update/delete`; no timed reminders can be created | 4 tool schemas, visible only after the first turn |
+| `time-context` | 模型拿不到当前时间/时区，对「今天」「最近」「这文件什么时候改的」只能猜 | 默认 10 分钟注入一次读数，约百字符/次，可忽略 |
+| `tool-schedule` | 没有 `schedule_create/list/update/delete`，建不了定时提醒 | 4 个工具的 schema，仅首轮之后可见 |
 
-It also reverts `plan-mode`'s opening `section` sentence to the official 0.2.1
-wording (`until the user approves your plan through exit_plan_mode`). The old
-sentence read `until exit_plan_mode succeeds` — treating "the call succeeded"
-as the approval condition, which lets the model leave plan mode without the
-user ever agreeing.
+另外把 `plan-mode` 的 `section` 首句改回官方 0.2.1 的措辞（`until the user approves
+your plan through exit_plan_mode`）。旧句写的是 `until exit_plan_mode succeeds`——把
+「调用成功」当成批准条件，模型可以在用户没点头时自行退出计划模式。
 
-Upstream and sibling plugins **restrict this area consistently**:
+上游与同类插件在这块**一致地做了限制**：
 
-| Row | godmode / router-standard line | anchored line (apex / anchored-flash / liangshen / anchored-standard) | dsh built-in minimal / ptc / standard / cordis |
+| 行 | godmode / router-standard 一系 | 锚定系（apex / anchored-flash / liangshen / anchored-standard） | dsh 内置 minimal / ptc / standard / cordis |
 |---|---|---|---|
-| `tool-web` → `web_fetch` | `fetch: false` (6/6) | `fetch: false` (4/4) | `fetch: true` |
-| `command-goal` (`/goal`) | absent (6/6) | absent (4/4) | present |
-| `present` (deliverable surfacing) | absent (6/6) | absent (4/4) | present (since 0.1.5-alpha.2) |
+| `tool-web` → `web_fetch` | `fetch: false`（6/6） | `fetch: false`（4/4） | `fetch: true` |
+| `command-goal`（`/goal`） | 缺失（6/6） | 缺失（4/4） | 有 |
+| `present`（交付物呈现） | 缺失（6/6） | 缺失（4/4） | 有（0.1.5-alpha.2 起） |
 
-But these two restrictions are **different in nature**, so they are handled
-differently.
+但这两条限制的**性质不同**，处理方式因此不同。
 
-### `web_fetch`: a model-visible subtraction → follow the family, keep `false`
+### `web_fetch`：模型可见的减法 → 跟随家族，保持 `false`
 
-- This is a row the family wrote **deliberately**, not an oversight:
-  `dsh-web-app` has disabled the host's `tool-web` row since `0.1.1-rc.2`
-  (earlier than the family wrote its file); the family knew the row belonged
-  to the preset and still wrote `fetch: false` while keeping `search`.
-- It is a **model-visible** subtraction (`web_fetch`'s schema enters the model
-  catalog); removing it needs measurement, and none of the 9 presets' docs
-  explain this line at all, nor offer any measurement.
-- It is **genuinely off**: `dsh-tool-web`'s `apply()` ends with
-  `if (resolved.fetch) applyWebFetchTool(...)` — when the condition fails the
-  tool is never registered.
-- **But a deployment that speaks for itself bypasses it** (measured): if the
-  deployment layer writes an explicit `tool-web` row (e.g. `fetch: true`), the
-  deployment's value wins and the preset's value does not participate; only
-  when nobody speaks does this row amount to "subtracting the host default".
-  So this restriction "cannot reach where it should, and subtracts where it
-  should not" — it is the family's habit, not a security or measurement
-  conclusion.
-- This preset keeps `false` (following the family). To enable it: change that
-  row's `fetch` to `true` and update the corresponding assertion in
-  `test/router.test.mjs`.
+- 这是家族**刻意**写的行，不是抄漏：`dsh-web-app` 自 `0.1.1-rc.2` 起就禁用了宿主
+  `tool-web` 行（早于家族落笔），家族知道这行归 preset，仍写 `fetch: false` 而把
+  `search` 留着。
+- 它是**模型可见**的减法（`web_fetch` 的 schema 进模型目录），去掉它需要测量，而 9 个
+  preset 的文档里对这条一个字都没解释，也没有任何测量。
+- 它是**真关掉**：`dsh-tool-web` 的 `apply()` 末尾是
+  `if (resolved.fetch) applyWebFetchTool(...)`，条件不成立就完全不注册。
+- **但部署自己表态时会被绕过**（实测）：部署层写一条显式 `tool-web` 行（如
+  `fetch: true`），生效的是部署那条，preset 的取值不参与；只有在无人表态时，这一行才
+  体现为「扣掉宿主默认」。所以这条限制「该管的地方管不到，不该扣的地方扣掉」——它是
+  家族的习惯，不是安全或测量结论。
+- 本 preset 保持 `false`（跟随家族）。要开启：把该行的 `fetch` 改成 `true`，并同步改
+  `test/router.test.mjs` 里那条断言。
 
-### `command-goal`: model-invisible, but still follows the family → not restored
+### `command-goal`：模型不可见，但仍跟随家族 → 不补
 
-One easy thing to get backwards, so the conclusion first: **not restoring it is
-a decision, not an omission.**
+这里有一个容易搞反的点，先说结论：**不补是决定，不是遗漏。**
 
-- The facts: every version of `dsh-base` carries this row and **enables** it;
-  `dsh-web-app` sets it to `disabled: true` from **0.1.2-alpha.2**; the
-  official presets add the row in **the same version**. Before that (including
-  the upstream family's target versions `0.1.0-rc.6` / `0.1.1-rc.2`) the host
-  provided `/goal` directly.
-- So the upstream family **neither forgot nor did not want it**: when it wrote
-  that comment the host did provide `/goal`, so omitting it was correct at the
-  time. The gap only appears when the same preset runs on 0.1.2-alpha.2 or
-  later (including this machine's 0.1.5-rc.2).
-- Current state (measured on `0.1.5-rc.2`): without the row,
-  `commands.list()` = `[compact, feedback, permission, plan]` — i.e. **no
-  `/goal`**. With it, `goal` appears.
-- Why still not added: although it costs no model context (`dsh-commands`
-  registers no prompt section — source checked, so adding it is zero
-  disturbance), **adding it departs from the family's tool face**. This
-  preset's position is "fix compatibility, do not add taste", and `/goal` is
-  taste. All 4 upstream presets omit this row, and this preset stays
-  consistent with them.
-- To enable it: add the `- id: command-goal` / `name:
-  '@deepseek-ai/dsh-command-goal'` pair back to the goals section and update
-  the corresponding assertion in `test/router.test.mjs` (which currently
-  requires it to be absent).
+- 事实层面：`dsh-base` 任何版本都带这行且**启用**；`dsh-web-app` 从
+  **0.1.2-alpha.2** 起把它设为 `disabled: true`；官方 preset 在**同一版本**补上该行。
+  这之前（含上游家族的目标版本 `0.1.0-rc.6` / `0.1.1-rc.2`）宿主直接提供 `/goal`。
+- 所以上游家族**不是漏写、也不是不想要**：它写那行注释时，宿主确实提供 `/goal`，省略
+  是正确的。缺口只在把同一份 preset 拿到 `0.1.2-alpha.2` 之后（含本机
+  `0.1.5-rc.2`）跑时才出现。
+- 现状（实测 `0.1.5-rc.2`）：不写该行，`commands.list()` =
+  `[compact, feedback, permission, plan]`，也就是**没有 `/goal`**。写了才有 `goal`。
+- 为什么还是不加：它虽然不占模型上下文（`dsh-commands` 不注册 prompt 段，已核源码，
+  所以加它零扰动），但**加它就是偏离家族工具面**。本 preset 的定位是「补兼容、不补
+  口味」，`/goal` 属于口味。上游 4 个 preset 一致不带这行，本 preset 也保持一致。
+- 要开启：把 `- id: command-goal` / `name: '@deepseek-ai/dsh-command-goal'` 两行加回
+  goals 段，并同步改 `test/router.test.mjs` 里的对应断言（那里现在是「必须不存在」）。
 
-### `present`: a model-visible addition → follow the family, not restored
+### `present`：模型可见的加法 → 跟随家族，不补
 
-- It made it into the official presets, but **only from `0.1.5-alpha.2`** —
-  the community family was written earlier, so this is "missed the boat"
-  rather than "did not want it".
-- Even so it is still a **model-visible** item (~464 characters of
-  description), so adding it means changing a catalog the family measured. By
-  the same rule (model-visible changes need measurement) it is not added. To
-  enable it: add the row back to `agent.cordis.yml` (`- id: present` /
-  `name: '@deepseek-ai/dsh-tool-present'`).
+- 它进了官方 preset，但**只从 `0.1.5-alpha.2` 起**——社区家族写于更早，属于「没赶上」
+  而非「不想要」。
+- 即便如此，它仍是**模型可见**的一项（描述约 464 字符），补进去等于改动家族测过的
+  目录。按同一条规则（模型可见的改动需要测量）不补。要开启：把该行加回
+  `agent.cordis.yml`（`- id: present` / `name: '@deepseek-ai/dsh-tool-present'`）。
 
-### The rule
+### 规则
 
-**The tool face follows the upstream family, adding and removing nothing; only
-compatibility problems that actually break are fixed.** What the family wrote
-explicitly (`fetch: false`) and what it did not write (`present`,
-`command-goal`) are both left alone — including the entries that "look
-better", because "looks better" has no measurement behind it, and this
-family's entire value comes from its measurements.
+**工具面跟随上游家族，不增不减；只补会炸的兼容问题。** 家族明写的（`fetch: false`）、
+家族没写的（`present`、`command-goal`）都不动——包括那些「加了看起来更好」的项，因为
+「看起来更好」没有测量支撑，而这一族的全部价值来自它的测量。
 
-`test/router.test.mjs` turns that rule into assertions: the 22 rows the host
-hands back must all be present (`command-goal` excepted — it is the decision
-above), `command-goal` and `present` must be absent, and `tool-web` must be
-`fetch: false`.
+`test/router.test.mjs` 把这条规则变成断言：宿主交还的 21 行必须齐（`command-goal`
+除外，它属于上面的决定），`command-goal` 与 `present` 必须不在，`tool-web` 必须
+`fetch: false`。
 
-## Host ownership handover timeline (goal / present / tool-web)
+## 宿主所有权移交时间线（goal / present / tool-web）
 
-Ownership of `/goal`, `present` and `web_fetch` moved from the host to the
-preset **in batches** across dsh 0.1.x. The actual timeline, checked
-version by version against the npm packages:
+`/goal`、`present`、`web_fetch` 这三项归属权，在 dsh 的 0.1.x 里**分批**从宿主移交给
+preset。逐版本核过 npm 包后的实际时间线：
 
-| Version | `dsh-base` | `dsh-web-app` | Official preset (standard) |
+| 版本 | `dsh-base` | `dsh-web-app` | 官方 preset（standard） |
 |---|---|---|---|
-| `0.1.0-rc.6` ← the upstream family's target | `command-goal` **enabled** | does not touch the row | **no** such row (not needed) |
-| `0.1.1-rc.2` | `command-goal` **enabled** | `tool-web` already `disabled` | no `command-goal` row |
-| `0.1.2-alpha.2` | `command-goal` enabled | `command-goal` also `disabled` | **adds** the `command-goal` row |
-| `0.1.5-alpha.2` | same | same | adds the `present` row |
-| `0.1.5-rc.2` | same | all 23 rows `disabled` | all three rows present |
-| `0.2.0-rc.2` ← this machine | `command-goal` still enabled | `command-goal` / `tool-ralph` / `tool-web` all `disabled` | all three present (plus `tool-plugin-manager`, `disabled`) |
+| `0.1.0-rc.6` ← 上游家族的目标版本 | `command-goal` **启用** | 不碰该行 | **无**该行（不需要） |
+| `0.1.1-rc.2` | `command-goal` **启用** | `tool-web` 已 `disabled` | 无 `command-goal` 行 |
+| `0.1.2-alpha.2` | `command-goal` 启用 | `command-goal` 也 `disabled` | **补上** `command-goal` 行 |
+| `0.1.5-alpha.2` | 同上 | 同上 | 再补 `present` 行 |
+| `0.1.5-rc.2` | 同上 | 23 行全部 `disabled` | 三行齐全 |
+| `0.2.0-rc.2` ← 本机 | `command-goal` 仍启用 | `command-goal` / `tool-ralph` / `tool-web` 三行均 `disabled` | 三行齐全（另加 `tool-plugin-manager`，`disabled`） |
 
-The key point: **`tool-web`'s handover predates the family writing its file**
-(the family knew the row belonged to the preset and still wrote
-`fetch: false` — a deliberate trade-off); **`command-goal`'s handover
-postdates it** (when the family wrote its comment the host did provide
-`/goal`, so its omission was correct then, not an oversight). Different in
-nature, handled differently.
+关键点：**`tool-web` 的移交早于家族落笔**（家族知道这行归 preset，仍写
+`fetch: false`，是刻意取舍）；**`command-goal` 的移交晚于家族落笔**（家族写注释时宿主
+确实提供 `/goal`，所以它的省略在当时是正确的，不是漏写）。两者性质不同，处理方式也
+不同。
 
-The `dsh-command-goal` package itself has existed since `0.0.1-rc.1` — it was
-never a new feature. Only "who is responsible for mounting it" changed.
+`dsh-command-goal` 包本身自 `0.0.1-rc.1` 就存在，从来不是新功能——变的只是「谁负责
+挂它」。
 
-## Version adaptation
+## 版本适配
 
-The strategy has always been **fix compatibility only, do not touch
-behaviour**. Upstream v0.1.0 only adapted to dsh `0.1.0-rc.6` and would
-install but not work on `0.1.5-rc.2`.
+策略始终是**只修兼容、不动行为**。上游 v0.1.0 只适配到 dsh `0.1.0-rc.6`，在
+`0.1.5-rc.2` 上会装得上、用不了。
 
-### 0.2.1 (the 0.4.1 round)
+### 0.2.1（0.4.1 本轮）
 
-This generation did not change the agent preset contract
-(`system-prompt/assemble`, `sections/tools/contexts`, `snapshotEvents()` all
-still exist); what changed is **the official presets' composition itself**:
+这一代没有改 agent preset 的契约（`system-prompt/assemble`、`sections/tools/contexts`、
+`snapshotEvents()` 都仍在），变的是**官方 preset 的组合本身**：
 
-| Deviation | Symptom | Fix |
+| 偏差 | 症状 | 修法 |
 |---|---|---|
-| Official standard adds `time-context` | This preset omits it → the model has no current time and guesses at anything date-related | Add the row (the host Web composition does not declare it; only the preset can) |
-| Official standard adds `tool-schedule` | No `schedule_*` tools; no timed reminders | Add the row |
-| `plan-mode`'s `section` wording changed | The old sentence `until exit_plan_mode succeeds` treats "the call succeeded" as the approval condition, letting the model leave plan mode without approval | Revert the opening sentence to the official wording, keep the rest verbatim |
-| Official removes `tool-ralph` / `tool-subagent-codex` / `-claude-code` | This preset still has all three (ralph still enabled) | Recorded as an `only-here` whitelist entry; keep or drop pending a measurement — untouched this round |
+| 官方 standard 新增 `time-context` | 本 preset 不写 → 模型没有当前时间，日期类判断全靠猜 | 补该行（宿主 Web 组合不声明它，只能由 preset 给） |
+| 官方 standard 新增 `tool-schedule` | 没有 `schedule_*` 四个工具，建不了定时提醒 | 补该行 |
+| `plan-mode` 的 `section` 改文案 | 旧句 `until exit_plan_mode succeeds` 把「调用成功」当批准条件，模型可在用户未批准时退出计划模式 | 首句改回官方措辞，其余逐字保留 |
+| 官方移除 `tool-ralph` / `tool-subagent-codex` / `-claude-code` 行 | 本 preset 仍有这三行（ralph 还是启用态） | 记为 `only-here` 白名单，去留待测量，本轮不动 |
 
-### 0.2.0-rc.2 (the 0.4.0 round)
+### 0.2.0-rc.2（0.4.0 本轮）
 
-| Deviation | Symptom | Fix |
+| 偏差 | 症状 | 修法 |
 |---|---|---|
-| The directory-form preset was removed | `$DSH_HOME/.agent-presets/<id>/` is read by nobody (0 hits searching all 288 packages in rc.2's dependency tree; the official migration doc's words: "Nothing reads that directory any more."). **The harshest symptom in practice**: the plugin installs, syncs files on every startup, leaves a roomful of logs — and the preset roster does not contain it at all | Deliver via an `@deepseek-ai/dsh-agent-preset` declaration row in the bundle patch; delete all disk sync |
-| Relative module reference in the composition | `name: ./router-bootstrap.mjs` has nowhere to resolve in a declaration row (rc.2 requires assets to resolve from the installed package) | Change to the in-package subpath export `dsh-router-flash/router-bootstrap` (declared in `exports`) |
-| `dsh-workflow-worker-thread` was renamed | That package does not exist in rc.2 (→ `dsh-workflow-ptc`), and the row makes the whole preset fail to mount | Rename the row id and package name together |
-| persona's `text` key | rc.2's schema only accepts `prefix`; `text` is an undeclared key, measured as "kept but read by nobody" = a dead key | Delete `text`, keep only `prefix` |
-| The compatibility gate cannot see this bundle | 0.3.x had empty `dependencies`/`peerDependencies`, so the host had no way to judge its relation to the runtime — this round 6 bundles were blocked for peer mismatch and this one was not among them, **not because it is compatible but because it declared nothing** | Declare 22 host-package peers (`^0.2.0-rc.2`) so the gate can block it |
-| README's default-preset recipe | `~/.dsh/settings.yaml` no longer exists on rc.2 | Change to overriding the `agent-preset-registry` row's `config.default` |
+| preset 目录形态被移除 | `$DSH_HOME/.agent-presets/<id>/` 已无人读取（rc.2 依赖树 288 个包全树检索 0 命中；官方迁移文档原话 "Nothing reads that directory any more."）。**实测症状最狠**：插件装上了、每次启动照旧同步文件、留一屋子日志，而 preset 名册里根本没有它 | 改为 bundle patch 里的 `@deepseek-ai/dsh-agent-preset` 声明行；删掉全部落盘同步 |
+| 组合里的相对模块引用 | `name: ./router-bootstrap.mjs` 在声明行里无处可解析（rc.2 要求资产从已安装的包解析） | 改为包内子路径导出 `dsh-router-flash/router-bootstrap`（由 `exports` 声明） |
+| `dsh-workflow-worker-thread` 已改名 | 该包在 rc.2 不存在（→ `dsh-workflow-ptc`），该行会让整份 preset 挂载失败 | 行 id 与包名同步改名 |
+| persona 的 `text` 键 | rc.2 的 schema 只认 `prefix`；`text` 是未声明键，实测「保留但无人读」= 死键 | 删掉 `text`，只留 `prefix` |
+| 兼容门禁看不见本包 | 0.3.x 的 `dependencies`/`peerDependencies` 全是空的，宿主无从判定它与运行时的关系——本轮有 6 个 bundle 因 peer 不匹配被拦，本包不在其中，**不是因为它兼容，而是因为它什么都没声明** | 声明 24 个宿主包 peer（`^0.2.0-rc.2`），让门禁能拦 |
+| README 的默认预设配方 | `~/.dsh/settings.yaml` 在 rc.2 上已不存在 | 改为覆盖 `agent-preset-registry` 行的 `config.default` |
 
-Seams measured as **still online**, and therefore unchanged by a single line:
-`system-prompt/assemble` is still `(assembly, context, next)`
-(`dsh-system-prompt:355`); `assembly.sections` / `contexts` / `tools` keep
-their shape; `session.snapshotEvents()`, `tool/call` and `user/message` event
-names are unchanged. That is also why this preset's routing logic could move
-over as-is.
+实测**仍然在线**、因此一行未改的接缝：`system-prompt/assemble` 仍是
+`(assembly, context, next)`（`dsh-system-prompt:355`）；`assembly.sections` /
+`contexts` / `tools` 形状未变；`session.snapshotEvents()`、`tool/call`、`user/message`
+事件名未变。这也是本 preset 的路由逻辑能原样搬过来的原因。
 
-### 0.1.5-rc.2 (0.3.0's historical adaptation, kept for the record)
+### 0.1.5-rc.2（0.3.0 的历史适配，保留记录）
 
-| Deviation | Symptom | Fix |
+| 偏差 | 症状 | 修法 |
 |---|---|---|
-| The persona row wrote only `config.text` | `dsh-persona` has required `prefix` since 0.1.5; failing that row's validation rejects the whole preset mount (`agent-preset/invalid`) | Write both `prefix` + `text` (schemastery keeps undeclared keys) so both 0.1.2-rc.1 ~ 0.1.5-rc.2 generations mount. **No longer needed as of 0.4.0** — `text` is gone |
-| Reading `session.events` | That property was replaced by `eventAt()` / `snapshotEvents()` in 0.1.2-alpha.4; every turn's prompt assembly threw a TypeError | `sessionEvents()` feature detection: prefer `snapshotEvents()`, fall back to `session.events` |
-| persona section position | `AssembledSection` now only has `{ name, text }`, no `order` to set — render order is array order | Upstream's "append after filtering" throws the identity sentence after all the tool descriptions (measured); changed to **in-place replacement** |
-| `/goal` command missing | The host stopped providing the row in 0.1.2-alpha.2, so a preset that does not write it has no `/goal` | **Not fixed**: it is a tool-face choice (costs no model context, but adding it departs from the family) — see the 「Tool face」 section |
+| persona 行只写 `config.text` | `dsh-persona` 自 0.1.5 起要求 `prefix`，该行校验失败即整份 preset 挂载被拒（`agent-preset/invalid`） | 双写 `prefix` + `text`（schemastery 保留未声明键），0.1.2-rc.1 ~ 0.1.5-rc.2 两代都能挂。**0.4.0 起已不需要**，`text` 已删 |
+| 读 `session.events` | 该属性已在 0.1.2-alpha.4 被 `eventAt()` / `snapshotEvents()` 取代，每轮提示词装配抛 TypeError | `sessionEvents()` 特性探测：`snapshotEvents()` 优先，回退 `session.events` |
+| persona 段位置 | `AssembledSection` 现在只有 `{ name, text }`，没有 `order` 可设，渲染顺序即数组顺序 | 上游「过滤后追加」会把身份句甩到全部工具说明之后（已实测），改为**原位替换** |
+| `/goal` 命令缺失 | 宿主自 0.1.2-alpha.2 起不再提供该行，preset 不写就没有 `/goal` | **不修**：属工具面选择（不占模型上下文，但补它偏离家族），见「工具面」一节 |
 
-`contexts: []` keeps the upstream value (both branches empty it): allowing it
-would inject a ~470-character runtime context snapshot into every turn
-(especially the first), and changing the most sensitive turn needs measurement
-that does not exist yet. Deployments that want that visibility should decide
-for themselves — that is the deployment's trade-off, not the preset's.
+`contexts: []` 保持上游原样（两个分支都清空）：放行它会往每一轮（尤其首轮）注入约
+470 字符的运行时上下文快照，改动最敏感的那一轮需要有测量支撑，目前没有。想要这份
+可见性的部署请自行决定——那是部署的取舍，不是 preset 的。
 
-## Known differences from the official `standard`
+## 组合与官方 standard 的已知差异
 
-28 of the 29 leaf rows in `presets/router-flash.patch.yml` point at someone
-else's package (97%). So that "upstream changed and this did not follow" can no
-longer be silent, the differences are frozen into a table where every entry
-needs a reason, enforced by `npm test`: **the difference set against the
-official `standard` preset must be exactly the whitelist** — one extra needs
-an explanation, one missing must be deleted (anti-rot).
+`presets/router-flash.patch.yml` 的 28 个叶子行里有 27 行指向别人的包（96%）。为了让
+「上游改了、这里没跟」不再静默，差异被固化成一张必须逐条给理由的表，并由 `npm test`
+强制：
+**与官方 `standard` preset 的差异集必须恰好等于白名单**，多一条要解释，少一条要删
+（防腐化）。
 
-| Row | Nature | Reason |
+| 行 | 性质 | 理由 |
 |---|---|---|
-| `router-bootstrap` | only here | the router itself |
-| `command-goal` / `present` / `tool-plugin-manager` / `tool-plugin-market` | official only | family tool face: not restored (the first two — see 「Tool face」; the last two belong to the host/deployment layer, and the official rows are themselves `disabled: true`) |
-| `persona` | different value | different identity sentence and no `suffix`; this row is only a fallback, replaced wholesale by the router at assembly time |
-| `tool-ralph` | only here | official 0.2.1 removed the row entirely; this preset still enables `maxRounds: 64` — **a real difference, keep-or-drop pending a measurement** |
-| `tool-subagent` | different value | missing 0.2.0's new `modelSelectionSettings: true` (a model-visible addition, not followed without measurement) |
-| `tool-subagent-fork` | different value | this preset adds `backgroundMode: continuable`; official has no such key |
-| `tool-subagent-codex` / `-claude-code` | only here | both rows are `disabled: true`, register no tools, and are unobservable |
-| `tool-web` | different value | family value `fetch: false` (a model-visible subtraction, not changed without measurement) |
+| `router-bootstrap` | 只本 preset 有 | 路由器本身 |
+| `command-goal` / `present` / `tool-plugin-manager` / `tool-plugin-market` / `tool-subagent-list-agents` | 只官方有 | 家族工具面：不补（前两者见「工具面」；`tool-plugin-manager` / `tool-plugin-market` 属宿主/部署层，且官方行本身 `disabled: true`；`tool-subagent-list-agents` 在 0.2.2-alpha.2 被移除——`list_agents` 并入 control 包主入口） |
+| `persona` | 取值不同 | 身份句不同且无 `suffix`；本行只是 fallback，装配时被路由器整体替换 |
+| `tool-ralph` | 只本 preset 有 | 官方 0.2.1 已整行移除；本 preset 仍开 `maxRounds: 64`——**真实差异，去留待一次测量** |
+| `tool-subagent` | 取值不同 | 缺 0.2.0 新增的 `modelSelectionSettings: true`（模型可见加法，未测量不跟） |
+| `tool-subagent-fork` | 取值不同 | 本 preset 多 `backgroundMode: continuable`（可续聊），官方无该键 |
+| `tool-subagent-codex` / `-claude-code` | 只本 preset 有 | 两行均 `disabled: true`，不注册工具，不可观测 |
+| `tool-web` | 取值不同 | 家族取值 `fetch: false`（模型可见减法，未测量不改） |
 
-**Differences 0.4.1 already eliminated**: `time-context` and `tool-schedule`
-moved from "official only" to "both sides have it" (capability restored), and
-`plan-mode`'s `section` wording now matches official verbatim.
+**0.4.1 已消掉的差异**：`time-context`、`tool-schedule` 从「只官方有」变成两边都有
+（能力恢复），`plan-mode` 的 `section` 文案与官方逐字对齐。
 
-One caveat: **"is this config key inside that package's schema" is not in
-scope for the offline check** — that schema only exists at runtime. To check
-it, use the host's Inspect: `cordis_inspect_query` →
-`host/Config/listConfigs {name: "@deepseek-ai/dsh-<package>"}`.
+补充说明：**「config 键是否在该包的 schema 里」不在离线检查范围内**——那份 schema 只在
+运行时存在。要查它用宿主 Inspect：`cordis_inspect_query` →
+`host/Config/listConfigs {name: "@deepseek-ai/dsh-<包名>"}`。
 
-## Runtime robustness
+## 运行时健壮性
 
-- **No more disk writes**: since 0.4.0 the preset is delivered by the
-  composition layer. At startup the plugin does one read-only check (is the
-  old `.agent-presets/router-flash` still there) and degrades that single
-  thing's failure to a log line — an explanatory plugin must never keep the
-  host from booting.
-- **A missing shell is no longer fatal**: when the tool catalog has neither
-  `bash` nor `pwsh`, the first turn degrades to file tools and logs a warning
-  instead of throwing and failing the whole request.
-- **A narrower crash surface**: the routing logic depends on only three seams
-  (the `system-prompt/assemble` event, the tool catalog, session events); if
-  any seam changes it degrades or warns, and never throws through to the whole
-  request.
+- **不再写盘**：0.4.0 起 preset 由组合层交付。插件启动时只做一次只读体检（旧的
+  `.agent-presets/router-flash` 是否还在），并把这唯一一件事的失败降级成日志——说明性
+  插件绝不该让宿主起不来。
+- **缺 shell 不再致命**：工具目录里既没有 `bash` 也没有 `pwsh` 时，首轮退化为文件工具
+  并写警告，而不是抛错让整轮请求失败。
+- **崩溃面收窄**：路由逻辑只依赖四个接缝（`system-prompt/assemble` 事件、`agent/created`
+  事件、`tools/result` 事件、会话事件），任一接缝变了也只是退化或告警，不抛错穿透到整轮请求。
 
-## What was adapted (relative to upstream v0.1.0)
+## 适配了什么（相对上游 v0.1.0）
 
-Upstream relied on three mechanisms that were already dead on `0.1.0-rc.6`;
-this preset carries over its fixes and adds the 0.1.5 adaptation:
+上游依赖三个在 0.1.0-rc.6 上就已失效的机制，本 preset 沿用其修法并补上 0.1.5 的适配：
 
-1. `ctx.on('session/event')` injection — session/event is session-scoped, so
-   an agent-plane preset never receives it.
-2. `target.inbox.append` — the agent object has no `.inbox` property.
-3. At assembly time there is no user/message in the events yet — a timing
-   problem.
+1. `ctx.on('session/event')` 注入 —— session/event 是 session-scoped，agent-plane
+   preset 收不到。
+2. `target.inbox.append` —— agent 对象没有 `.inbox` 属性。
+3. assemble 时事件里还没有 user/message —— 时序问题。
 
-**The fix**: merge the guidance statically into the `WEAK_FLASH` persona and
-depend on no dynamic injection mechanism at all.
+**修复方式**：把引导静态合并进 `WEAK_FLASH` persona，不依赖任何动态注入机制。
 
-## Tests
+## 自检
 
 ```bash
 npm test          # = node test/router.test.mjs && node scripts/check-composition.mjs
 ```
 
-**`npm install` is not needed**: this package has zero dependencies, and the
-check script borrows `js-yaml` and the official preset files from the local
-dsh runtime.
+**不需要 `npm install`**：本包零依赖，体检脚本从本机的 dsh 运行时借 `js-yaml` 与官方
+preset 文件。
 
-- `test/router.test.mjs` — pure logic regression: model detection (DeepSeek
-  Flash matches, other families' same-named flash does not), persona in-place
-  replacement and deduplication, first-turn tool face (core + platform shell),
-  the full catalog opening after the first `tool/call`, runtime context
-  preservation, keyword classification, the degradation warning when no shell
-  exists, delivery-form self-consistency (declaration row id / `config.id` /
-  in-package subpath reference), plus 0.4.1's two additions: the clock row and
-  the schedule row must be in the composition, and `flashGuidance:false` must
-  fall back to the neutral sentence and never to the spec sentence.
-- `scripts/check-composition.mjs` — contract check, four assertions each
-  reporting on its own: ① the declaration row is structurally consistent;
-  ② every self-reference is provided by `exports` and the file exists;
-  ③ every `@deepseek-ai/...` row name in the composition resolves in the
-  current dsh runtime (**the net that catches rename drift**); ④ the
-  difference set against the official `standard` is exactly the whitelist.
-  When dsh cannot be found it reports SKIP explicitly rather than pretending
-  to pass; `--strict` upgrades SKIP to FAIL.
+- `test/router.test.mjs` —— 纯逻辑回归：模型识别（DeepSeek Flash 命中、同名 flash 的
+  其他家族不命中）、persona 原位替换与去重、首轮工具面（core + 平台 shell）、首次
+  `tool/call` 后放开全目录、运行时上下文保留、关键词分类、缺 shell 时的降级告警、
+  交付形态自洽（声明行 id / `config.id` / 包子路径引用）、HarnessMM 决策重用层
+  （`evaluateGuard` / `shouldBypassCallback` / `ChiselPlanScheduler` /
+  `createSubstitutionCertificate` / `isRedundantVerification`）、0.2.2+ 的
+  `tools.restrict()` 路径，以及 0.4.1 新增的两条：时钟行与定时行必须在组合里、
+  `flashGuidance:false` 必须退回中性句且不得退回 spec 句。
+- `scripts/check-composition.mjs` —— 契约体检，四条断言各自报出：①声明行结构自洽；
+  ②自有引用都能由 `exports` 提供且文件存在；③组合里每个 `@deepseek-ai/...` 行名都能在
+  当前 dsh 运行时里解析（**改名漂移的拦网**）；④与官方 `standard` 的差异集恰好等于
+  白名单。找不到 dsh 时明确报 SKIP 而非假装通过；`--strict` 把 SKIP 升级为 FAIL。
 
-## Scope
+## 适用范围
 
-- Once `isFlashModel` matches, it always takes the weak branch (the author's
-  measured optimum, w7).
-- Non-Flash DeepSeek models (e.g. `deepseek-v4-pro`) take the keyword
-  classification path and can still use the preset.
-- Third-party models (e.g. `gemini-2.5-flash`) keep keyword
-  classification by default but no longer narrow the first turn; the neutral
-  sentence is opt-in via `thirdPartyGuidance: neutral`. LongCat ids form their
-  own `longcat` family with a dedicated long-context persona.
-- Complex build tasks (large projects, greenfield development) benefit most
-  from the deep-thinking anchor.
+- 命中 `isFlashModel` 后一律走 weak 模式（作者实测 w7 最优解）。
+- DeepSeek 非 Flash 模型（如 `deepseek-v4-pro`）走关键词分类逻辑，仍可用。
+- 第三方模型（如 `gemini-2.5-flash`）默认仍按首条消息分类，但不收窄
+  首轮；中性句是 opt-in（`thirdPartyGuidance: neutral`）。LongCat 系 id 另成
+  `longcat` 家族，配龙猫专属长上下文人设。
+- 复杂构建任务（如大型工程、从零开发）尤其受益于深度思考锚。
+- HarnessMM 决策重用层对所有家族生效：模型可以声明一小串确定性链条，控制器在
+  每一步卫述成立时本地执行，一旦失败立即回退给模型的正常推理。
 
-## Package layout
+## 包结构
 
 ```
 dsh-router-flash/
-├── package.json                     # dsh.bundle (two patches) + dsh.client + 22 peer declarations
-├── cordis.patch.yml                 # patch 1: insert the dsh-router-flash host row (legacy-dir check)
+├── package.json                     # dsh.bundle（两条补丁）+ dsh.client + 24 条 peer 声明
+├── cordis.patch.yml                 # 补丁 1：insert dsh-router-flash 宿主行（旧目录体检）
 ├── presets/
-│   └── router-flash.patch.yml       # patch 2: the @deepseek-ai/dsh-agent-preset declaration row (the composition, 29 rows)
+│   └── router-flash.patch.yml       # 补丁 2：@deepseek-ai/dsh-agent-preset 声明行（组合本体，28 行）
 ├── lib/
-│   ├── index.js                     # host side: read-only check of the legacy directory, no more disk writes
-│   ├── client.js                    # client side: empty placeholder (no browser UI)
-│   ├── router-bootstrap.mjs         # the router: assemble hook (persona routing + first-turn tool face)
-│   └── router-core.mjs              # pure routing logic: mode detection / persona / tool face (zero dependencies)
-├── test/router.test.mjs             # pure-logic self-check
-├── scripts/check-composition.mjs    # contract check (structure / references / resolvability / baseline-diff whitelist)
-├── install.sh                       # git-channel installer
-├── intro.png                        # hero image
-├── ui-preset-picker.png             # actual UI: preset picker
-└── ui-first-turn-tools.png          # actual UI: first-turn tool face
+│   ├── index.js                     # host 端：只读体检旧形态目录，不再写盘
+│   ├── client.js                    # client 端：空实现占位（无浏览器 UI）
+│   ├── router-bootstrap.mjs         # 路由器：assemble 钩子（persona 路由）+ agent/created tools.restrict + tools/result HarnessMM 链式置换
+│   └── router-core.mjs              # 路由纯逻辑：模式识别 / persona / 工具面 / HarnessMM 决策重用（零依赖）
+├── test/router.test.mjs             # 纯逻辑自检
+├── scripts/check-composition.mjs    # 契约体检（结构 / 引用 / 可解析 / 基线差异白名单）
+├── install.sh                       # git 渠道安装脚本
+├── intro.png                        # 头图
+├── ui-preset-picker.png             # 实际 UI：预设选择器
+└── ui-first-turn-tools.png          # 实际 UI：首轮工具面
 ```
 
-`dsh.bundle.patch` is an **array** (the official `dsh-web-app` uses it the same
-way): the host row and the preset declaration each get their own file, so
-whichever half changes, that half is the diff.
+`dsh.bundle.patch` 是**数组**（官方 `dsh-web-app` 也这么用）：宿主行与 preset 声明各自
+一个文件，改哪半边就 diff 哪半边。
 
-## Notes
+## 说明
 
-- The host plugin **no longer writes to disk**. 0.3.x used Node's native file
-  API to sync the preset directory (to dodge startup ordering); as of 0.4.0
-  that entire write path is gone — the preset goes through the composition
-  layer and the plugin is left with one read-only check.
-- Override the preset by Loader row id (`preset-router-flash`) in the
-  profile's `cordis.patch.yml`, replacing the whole `config`; **an override is
-  a whole-value replacement, so omitting a field loses it** — restate `id` /
-  `plugins` when overriding.
-- The row id `preset-router-flash` is the Loader address; `config.id:
-  router-flash` is the identity a session remembers. Renaming it would make
-  old sessions lose their preset, so it is fixed.
+- host 插件**不再写盘**。0.3.x 曾用 Node 原生文件 API 同步 preset 目录（为了绕开启动
+  时序），0.4.0 起整个写入路径消失——preset 走组合层，插件只剩一次只读体检。
+- 覆盖 preset 用 Loader 行 id（`preset-router-flash`）在 profile 的
+  `cordis.patch.yml` 里整段替换 `config`；**覆盖是整体替换，漏字段即丢字段**，所以
+  覆盖时要把 `id`/`plugins` 一并重述。
+- 行 id `preset-router-flash` 是 Loader 地址，`config.id: router-flash` 才是会话记住的
+  身份。改名会让老会话认不回自己的 preset，因此固定不动。
 
-## Credits and provenance
+## 致谢与来源
 
-This repository is a derived work. Its content comes from:
+本仓库是衍生作品，内容来源如下：
 
-| Project | Author | License | Use |
+| 项目 | 作者 | 许可 | 用途 |
 |---|---|---|---|
-| [SheberDavid/v4-flash-godmode-opencode-go](https://github.com/SheberDavid/v4-flash-godmode-opencode-go) | SheberDavid | no standalone LICENSE (its README declares it is based on MIT projects) | the direct source of the `presets/` composition and the dsh rc.6 adaptation logic |
-| [dsh-router-standard](https://github.com/yjh051108/dsh-router-standard) | yjh051108 | MIT (© 2026 yjh051108) | the origin of the Flash w7 persona, the deep-thinking anchor and the routing research |
-| [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite) | yjh051108 | MIT | routing research |
-| [HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM) | PhiAgent-0 contributors | Apache-2.0 (© 2026 PhiAgent-0 contributors) | source of the GDR/CCS decision-reuse logic (`evaluateGuard`, `ChiselPlanScheduler`, substitution certificates) |
-| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek | MIT | the host framework |
+| [SheberDavid/v4-flash-godmode-opencode-go](https://github.com/SheberDavid/v4-flash-godmode-opencode-go) | SheberDavid | 无独立 LICENSE（其 README 声明基于 MIT 项目） | `presets/` 组合本体与 dsh rc.6 适配逻辑的直接来源 |
+| [dsh-router-standard](https://github.com/yjh051108/dsh-router-standard) | yjh051108 | MIT（© 2026 yjh051108） | Flash w7 persona、深度思考锚与路由研究的源头 |
+| [dsh-routing-suite](https://github.com/yjh051108/dsh-routing-suite) | yjh051108 | MIT | 路由研究 |
+| [HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM) | PhiAgent-0 contributors | Apache-2.0（© 2026 PhiAgent-0 contributors） | GDR/CCS 决策重用逻辑（`evaluateGuard`、`ChiselPlanScheduler`、置换凭证）的来源 |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek | MIT | 宿主框架 |
 
-The bundle wrapper this repository adds (`package.json` / `cordis.patch.yml` /
-`presets/` / `lib/` / `scripts/`) is new code contributed by this repository,
-except for the HarnessMM-derived decision-reuse logic in `lib/` (see above).
+本仓库新增的 bundle 包装层（`package.json` / `cordis.patch.yml` / `presets/` / `lib/` /
+`scripts/`）为本仓库独立新增代码，但 `lib/` 中的 HarnessMM 派生决策重用逻辑除外
+（见上表）。
 
-Full license and derivation-chain details are in [LICENSE](./LICENSE) and
-[NOTICE](./NOTICE). DeepSeek is a trademark of DeepSeek; this project is a
-community artifact and is not affiliated with DeepSeek.
+完整许可与衍生链说明见 [LICENSE](./LICENSE) 与 [NOTICE](./NOTICE)。DeepSeek 是
+DeepSeek 公司商标；本项目为社区产物，与 DeepSeek 无关联。
