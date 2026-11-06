@@ -139,6 +139,8 @@
           # they need no realm. The `fs` service and its policy stay in the host.
           - id: tool-fs
             name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              applyPatch: false
 
           - id: tool-fs-search
             name: '@deepseek-ai/dsh-tool-fs-search'

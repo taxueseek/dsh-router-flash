@@ -1,6 +1,6 @@
 {
   "name": "dsh-router-flash",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "DSH agent preset 分发包：探索模式（DeepSeek V4 Flash，模型 id 命中即生效，不绑定渠道）。以 @deepseek-ai/dsh-agent-preset 声明行交付，安装即生效，无落盘同步。",
   "type": "module",
   "main": "lib/index.js",
@@ -63,7 +63,8 @@
       "dshReleases": {
         "0.2.0-rc.2": "compatible",
         "0.2.1-rc.1": "compatible",
-        "0.2.2-alpha.2": "compatible"
+        "0.2.2-alpha.2": "compatible",
+        "0.2.2-rc.1": "compatible"
       },
       "dshOperations": {
         "0.2.0-rc.2": {
@@ -77,6 +78,7 @@
   },
   "scripts": {
     "test": "node test/router.test.mjs && node scripts/check-composition.mjs",
+    "typecheck": "node --check lib/index.js && node --check lib/client.js",
     "replay": "node scripts/replay-routing.mjs"
   },
   "peerDependencies": {
