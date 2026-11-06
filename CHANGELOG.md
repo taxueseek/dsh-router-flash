@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.1 — 2026-11-06 — single-file bundle patch
+
+### Changed
+
+- **The two patch files are merged into one `cordis.patch.yml`.** 0.5.0 declared
+  `dsh.bundle.patch` as an array (`["./cordis.patch.yml", "./presets/router-flash.patch.yml"]`);
+  0.5.1 merges both inserts into the single `cordis.patch.yml` and declares it as one
+  string. The host loads both shapes identically, but the plugin-market tooling this
+  package is submitted to does not: the DSH STORE submission precheck rejects arrays
+  outright (`SUBMISSION_BUNDLE_PATCH_INVALID`, checked before any scan), and the
+  deepseek1024 catalog's static review gate requires "a non-empty string". `presets/`
+  is gone; the preset declaration insert and every design comment moved verbatim into
+  `cordis.patch.yml` as its second operation. The loaded operation sequences of both
+  layouts were deep-compared with the host's own js-yaml: identical in content and
+  order, `!!js` platform switches included. No runtime behavior change.
+- `scripts/check-composition.mjs` locates the `preset-router-flash` declaration by id
+  among all inserts instead of assuming it is the first operation.
+- `install.sh` pins `v0.5.1`.
+
 ## 0.5.0 — 2026-11-03 — third-party models stop getting a first turn they cannot use
 
 This change is limited to what a deterministic replay can prove. Replaying

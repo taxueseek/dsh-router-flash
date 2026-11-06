@@ -310,10 +310,10 @@ const HOST_DELEGATED_ROWS = [
   'agent-instructions', 'tool-todo', 'tool-web',
 ]
 // 组合已从「preset 目录里的 agent.cordis.yml」搬进 bundle patch 的声明行
-// （presets/router-flash.patch.yml），整段缩进 +10。下面的断言仍按原样的零缩进
-// 文本比对，所以先 dedent 回来——搬迁不该顺带改掉这些断言的字面。
+// （0.5.1 起并入 cordis.patch.yml 的第二条 insert），整段缩进 +10。下面的断言
+// 仍按原样的零缩进文本比对，所以先 dedent 回来——搬迁不该顺带改掉这些断言的字面。
 const patch = readFileSync(
-  fileURLToPath(new URL('../presets/router-flash.patch.yml', import.meta.url)), 'utf8',
+  fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)), 'utf8',
 )
 const composition = patch
   .split('\n')

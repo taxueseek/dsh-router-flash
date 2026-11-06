@@ -223,7 +223,7 @@ The preset is **platform-agnostic**; dsh picks the shell tool automatically:
 |---|---|---|
 | macOS | bash | measured (this round's verification environment) |
 | Linux | bash | not measured; same bash branch |
-| Windows | pwsh (PowerShell) | not measured; the `process.platform === 'win32'` check in `presets/router-flash.patch.yml` disables bash and enables pwsh automatically |
+| Windows | pwsh (PowerShell) | not measured; the `process.platform === 'win32'` check in `cordis.patch.yml` disables bash and enables pwsh automatically |
 
 > The core routing logic (persona / guidance / model detection) is
 > OS-independent. A missing shell is no longer fatal: the turn degrades to
@@ -481,7 +481,7 @@ for themselves — that is the deployment's trade-off, not the preset's.
 
 ## Known differences from the official `standard`
 
-27 of the 28 leaf rows in `presets/router-flash.patch.yml` point at someone
+27 of the 28 leaf rows in `cordis.patch.yml` (the preset declaration insert) point at someone
 else's package (96%). So that "upstream changed and this did not follow" can no
 longer be silent, the differences are frozen into a table where every entry
 needs a reason, enforced by `npm test`: **the difference set against the
@@ -589,10 +589,8 @@ dsh runtime.
 
 ```
 dsh-router-flash/
-├── package.json                     # dsh.bundle (two patches) + dsh.client + 24 peer declarations
-├── cordis.patch.yml                 # patch 1: insert the dsh-router-flash host row (legacy-dir check)
-├── presets/
-│   └── router-flash.patch.yml       # patch 2: the @deepseek-ai/dsh-agent-preset declaration row (the composition, 28 rows)
+├── package.json                     # dsh.bundle (single patch) + dsh.client + 24 peer declarations
+├── cordis.patch.yml                 # both inserts: the dsh-router-flash host row (legacy-dir check) + the @deepseek-ai/dsh-agent-preset declaration row (the composition, 28 rows)
 ├── lib/
 │   ├── index.js                     # host side: read-only check of the legacy directory, no more disk writes
 │   ├── client.js                    # client side: empty placeholder (no browser UI)
@@ -637,7 +635,7 @@ This repository is a derived work. Its content comes from:
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | DeepSeek | MIT | the host framework |
 
 The bundle wrapper this repository adds (`package.json` / `cordis.patch.yml` /
-`presets/` / `lib/` / `scripts/`) is new code contributed by this repository,
+`lib/` / `scripts/`) is new code contributed by this repository,
 except for the HarnessMM-derived decision-reuse logic in `lib/` (see above).
 
 Full license and derivation-chain details are in [LICENSE](./LICENSE) and

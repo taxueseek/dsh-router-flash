@@ -199,7 +199,7 @@ dsh plugin --profile web remove dsh-router-flash
 |---|---|---|
 | macOS | bash | 实测通过（本轮验证环境） |
 | Linux | bash | 未实测；走同一 bash 分支 |
-| Windows | pwsh（PowerShell） | 未实测；`presets/router-flash.patch.yml` 内 `process.platform === 'win32'` 判断会自动禁用 bash、启用 pwsh |
+| Windows | pwsh（PowerShell） | 未实测；`cordis.patch.yml` 内 `process.platform === 'win32'` 判断会自动禁用 bash、启用 pwsh |
 
 > 核心路由逻辑（persona / 引导 / 模型识别）与操作系统无关。缺 shell 时不再报错，
 > 退化为文件工具并写警告。
@@ -410,7 +410,7 @@ preset。逐版本核过 npm 包后的实际时间线：
 
 ## 组合与官方 standard 的已知差异
 
-`presets/router-flash.patch.yml` 的 28 个叶子行里有 27 行指向别人的包（96%）。为了让
+`cordis.patch.yml`（preset 声明 insert）的 28 个叶子行里有 27 行指向别人的包（96%）。为了让
 「上游改了、这里没跟」不再静默，差异被固化成一张必须逐条给理由的表，并由 `npm test`
 强制：
 **与官方 `standard` preset 的差异集必须恰好等于白名单**，多一条要解释，少一条要删
@@ -492,10 +492,8 @@ preset 文件。
 
 ```
 dsh-router-flash/
-├── package.json                     # dsh.bundle（两条补丁）+ dsh.client + 24 条 peer 声明
-├── cordis.patch.yml                 # 补丁 1：insert dsh-router-flash 宿主行（旧目录体检）
-├── presets/
-│   └── router-flash.patch.yml       # 补丁 2：@deepseek-ai/dsh-agent-preset 声明行（组合本体，28 行）
+├── package.json                     # dsh.bundle（单条补丁）+ dsh.client + 24 条 peer 声明
+├── cordis.patch.yml                 # 两条 insert：dsh-router-flash 宿主行（旧目录体检）+ @deepseek-ai/dsh-agent-preset 声明行（组合本体，28 行）
 ├── lib/
 │   ├── index.js                     # host 端：只读体检旧形态目录，不再写盘
 │   ├── client.js                    # client 端：空实现占位（无浏览器 UI）

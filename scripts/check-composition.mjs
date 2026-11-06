@@ -34,7 +34,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_DIR = resolvePath(HERE, "..");
-const PATCH_PATH = join(PACKAGE_DIR, "presets", "router-flash.patch.yml");
+const PATCH_PATH = join(PACKAGE_DIR, "cordis.patch.yml");
 const MANIFEST_PATH = join(PACKAGE_DIR, "package.json");
 
 const STRICT = process.argv.includes("--strict");
@@ -217,8 +217,10 @@ async function main() {
   let rows;
   try {
     const doc = yaml.load(readFileSync(PATCH_PATH, "utf8"), { schema });
-    declaration = doc?.[0]?.insert?.[0];
-    if (declaration === undefined) throw new Error("顶层不是 `- insert: [...]` 补丁层");
+    // 0.5.1 起单文件两条 insert（宿主行 + preset 声明），按 id 定位声明行。
+    const inserts = (Array.isArray(doc) ? doc : []).flatMap((op) => (Array.isArray(op?.insert) ? op.insert : []));
+    declaration = inserts.find((row) => row?.id === "preset-router-flash");
+    if (declaration === undefined) throw new Error("顶层没有 `- insert: [...]` 里的 preset-router-flash 声明行");
     if (declaration.id !== "preset-router-flash") {
       throw new Error(`声明行 id 应为 preset-router-flash，实际 ${JSON.stringify(declaration.id)}`);
     }
@@ -333,7 +335,7 @@ function runtimeVersionOf(dshDir) {
 function report() {
   const failed = results.filter((item) => item.ok === false);
   const skipped = results.filter((item) => item.ok === null);
-  process.stdout.write("\n组合体检 · presets/router-flash.patch.yml\n");
+  process.stdout.write("\n组合体检 · cordis.patch.yml\n");
   process.stdout.write("─".repeat(64) + "\n");
   for (const item of results) {
     const mark = item.ok === true ? "PASS" : item.ok === false ? "FAIL" : "SKIP";

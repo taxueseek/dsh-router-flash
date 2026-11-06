@@ -8,11 +8,11 @@
 # Why the git channel: this package is not published to npm at all — the
 # preset is delivered as a bundle patch layer, so installs go through
 # git+https. Pinning the tag keeps the install reproducible; drop the
-# `#v0.5.0` suffix to track main.
+# `#v0.5.1` suffix to track main.
 set -eu
 
 PROFILE="web"
-REF="v0.5.0"
+REF="v0.5.1"
 while [ $# -gt 0 ]; do
   case "$1" in
     --profile)
@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do
     --ref=*)
       REF="${1#*=}"; shift ;;
     -h|--help)
-      echo "usage: install.sh [--profile <name>] [--ref <tag|branch>]  (default: web, v0.5.0)"; exit 0 ;;
+      echo "usage: install.sh [--profile <name>] [--ref <tag|branch>]  (default: web, v0.5.1)"; exit 0 ;;
     *)
       echo "[dsh-router-flash] error: unknown argument '$1' (usage: install.sh [--profile <name>] [--ref <tag|branch>])" >&2; exit 1 ;;
   esac
