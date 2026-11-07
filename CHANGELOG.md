@@ -18,6 +18,12 @@
 - **LongCat 家族首轮固定走 `weak` 分支**：`router-bootstrap.mjs` 此前只给 `family === 'flash'`
   固定 `'weak'`，导致 LongCat 首条消息含构建或修复词时掉入 `0`/`1` 分支丢失 `WEAK_LONGCAT`
   专属长上下文锚点；现将 `family === 'longcat'` 一并归入 `'weak'`。
+- **首轮 core 工具集补齐 `glob` 与 `grep`**：本机 105 个 `router-flash` 会话（6,998 次工具调用）
+  实测显示，首轮裁掉 `glob`/`grep` 导致模型第 1 步被迫用 `bash` 跑 `find`/`ls`/`grep` 并形成
+  整场沿用 `bash` 的强先验（`bash` 占 69.7%，`glob` 0 次、`grep` 3 次），同时在 ≤0.2.1 宿主上
+  造成 71/88 个会话出现 `tool:glob`/`tool:grep` 孤儿提示词、在 0.2.2+ 宿主上造成 Step 2 提示词
+  中部插入抖动。现将 `coreFor('weak' | 'react')` 扩为 `['read', 'write', 'edit', 'glob', 'grep']`，
+  并为 `run_chain` 补入字面量闭包示例。
 
 ### Removed
 

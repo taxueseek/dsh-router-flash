@@ -43,7 +43,7 @@ What it does:
 |---|---|
 | **Match** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)` — model- and channel-agnostic; `modelFamily()` splits ids into `flash` / `deepseek` / `longcat` / `third-party` |
 | **Persona** | For Flash, always the weak branch (w7 guidance): classify, review, stay on topic, think deeply, close the loop |
-| **First turn** | Only `read` / `write` / `edit` plus the platform shell (`bash`, or `pwsh` on Windows) |
+| **First turn** | Only `read` / `write` / `edit` / `glob` / `grep` plus the platform shell (`bash`, or `pwsh` on Windows) |
 | **After the first `tool/call`** | The full 26-row catalog opens; when `chain: true` is enabled, `run_chain` is also exposed (off by default) |
 
 The router hooks the `system-prompt/assemble` seam for persona routing. On

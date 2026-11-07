@@ -188,8 +188,8 @@ async function assemble({ model, events = [], tools = ALL_TOOLS, warnings = [], 
 }
 
 const first = await assemble({ model: 'deepseek-v4-flash' })
-assert.equal(first.tools.map((t) => t.name).join(','), 'read,write,edit,bash',
-  '首轮工具面 = weak core(含 write) + 平台 shell')
+assert.equal(first.tools.map((t) => t.name).join(','), 'read,write,edit,glob,grep,bash',
+  '首轮工具面 = weak core(含 read/write/edit/glob/grep) + 平台 shell')
 assert.ok(first.sections[0].text.startsWith('You are a helpful assistant.'))
 assert.equal(first.contexts.length, 0, '首轮清空运行时上下文（上游行为，未测量不改）')
 
@@ -272,8 +272,8 @@ const shellless = await assemble({
   tools: ALL_TOOLS.filter((t) => t.name !== 'bash'),
   warnings,
 })
-assert.equal(shellless.tools.map((t) => t.name).join(','), 'read,write,edit',
-  '缺 shell 时首轮只剩文件工具')
+assert.equal(shellless.tools.map((t) => t.name).join(','), 'read,write,edit,glob,grep',
+  '缺 shell 时首轮只剩文件与检索工具')
 assert.equal(warnings.length, 1, '降级必须留下告警')
 assert.ok(/bash\/pwsh/.test(warnings[0]))
 
@@ -326,7 +326,7 @@ assert.match(composition, /- id: tool-web\n  name: '@deepseek-ai\/dsh-tool-web'\
 assert.deepEqual(sessionEvents({ snapshotEvents: () => [{ type: 'x' }] }), [{ type: 'x' }])
 assert.deepEqual(sessionEvents({ events: [{ type: 'y' }] }), [{ type: 'y' }])
 
-assert.deepEqual(coreFor('weak'), ['read', 'write', 'edit'])
+assert.deepEqual(coreFor('weak'), ['read', 'write', 'edit', 'glob', 'grep'])
 
 // --- 交付形态：声明行自洽 ------------------------------------------------
 // 0.2.0-rc.2 起 preset 是插件行，行 id 是 Loader 地址、config.id 才是会话记住的
@@ -395,7 +395,7 @@ const restrictAgent = {
   ctx: { tools: fakeTools },
 }
 for (const handler of events.get('agent/created') ?? []) handler({ agent: restrictAgent })
-assert.deepEqual(restrictFilters[0], ['read', 'write', 'edit', 'bash'],
+assert.deepEqual(restrictFilters[0], ['read', 'write', 'edit', 'glob', 'grep', 'bash'],
   '0.2.2+ 首轮收窄 = weak core + 平台 shell（经 tools.restrict）')
 for (const handler of events.get('tools/result') ?? []) handler({ agent: restrictAgent })
 assert.equal(lifts, 1, '首次工具结果后解除收窄')

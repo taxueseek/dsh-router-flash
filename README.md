@@ -41,7 +41,7 @@ dsh 网页端里模型无关的 agent preset——只看模型 id，首轮收窄
 |---|---|
 | **命中** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)`，模型与渠道都无关；`modelFamily()` 把 id 分成 `flash` / `deepseek` / `longcat` / `third-party` 四家族 |
 | **persona** | 对 Flash 一律 weak 分支（w7 引导）：分类、回顾、反跑题、深度思考、决策闭环 |
-| **首轮** | 只给 `read` / `write` / `edit` 加平台 shell（`bash`，Windows 上是 `pwsh`） |
+| **首轮** | 只给 `read` / `write` / `edit` / `glob` / `grep` 加平台 shell（`bash`，Windows 上是 `pwsh`） |
 | **首次 `tool/call` 之后** | 放开 26 行全目录；打开 `chain` 时目录里多一个 `run_chain`（默认关） |
 
 路由器挂在 `system-prompt/assemble` 接缝上做人设路由。DSH 0.2.2+ 的首轮收窄
