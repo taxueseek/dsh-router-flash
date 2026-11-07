@@ -53,8 +53,6 @@ const ALLOWED_DIFFS = [
   { id: "tool-ralph", kind: "only-here", note: "官方 0.2.1 已整行移除；本 preset 仍开 maxRounds:64——真实差异，去留待一次测量" },
   { id: "tool-subagent", kind: "config", note: "缺 0.2.0 新增的 modelSelectionSettings:true（模型可见加法，未测量不跟）" },
   { id: "tool-subagent-fork", kind: "config", note: "本 preset 多 backgroundMode: continuable（可续聊），官方无该键" },
-  { id: "tool-subagent-codex", kind: "only-here", note: "官方已移除该行；本行 disabled:true，不注册工具，不可观测" },
-  { id: "tool-subagent-claude-code", kind: "only-here", note: "同上" },
   { id: "tool-web", kind: "config", note: "家族取值 fetch:false（模型可见减法，未测量不改）" },
 ];
 

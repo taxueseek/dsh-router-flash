@@ -11,7 +11,6 @@ import {
   evaluateGuard,
   modelFamily,
   personaFor,
-  shouldBypassCallback,
 } from '../lib/router-core.mjs'
 
 const GATEWAY_URL = 'http://127.0.0.1:3425/v1/chat/completions'
@@ -161,7 +160,7 @@ async function runBenchmarkForModel(modelId) {
 
   // [步骤 3] 控制器评估卫述条件与回调置换 (GDR + CCS)
   console.log(`[步骤 3] 控制器本地评估卫述条件 (0 Token 消耗)...`)
-  const canBypass = shouldBypassCallback(receipt, guardedCandidate)
+  const canBypass = Boolean(guardedCandidate?.action && evaluateGuard(guardedCandidate.guard, receipt))
 
   if (canBypass) {
     const estimatedContextTokens = (usage.prompt_tokens || 1000) + (usage.completion_tokens || 300)

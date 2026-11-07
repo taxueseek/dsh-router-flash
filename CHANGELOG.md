@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.6.1 — 2026-11-07 — 首轮路由与工具收窄缺陷修复、重复检测移交与冗余裁剪
+
+### 以前不行、现在能行
+
+- **Web UI 切换模型后人设与首轮收窄不再错配**：此前 `system-prompt/assemble` 只读静态的
+  `agent.options.model`，用户在界面模型选择器切模型后仍按默认模型路由（本机回放 20+ 会话
+  错配）。现在新增 `resolveModelId(agent, context)`，按 `context.modelSelection` →
+  `agent.model.current()` → 会话最新 `model/selection` 事件 → `agent.options.model` 顺序解析；
+  同时监听 `session/event` 的 `model/selection` 与 `turn/start`，在首次工具调用前动态重算或
+  解除首轮 `tools.restrict()`。
+- **Turn 1 Step 1 就能读到首条用户消息，Step 2 不再翻转人设击穿 KV 缓存**：DSH 0.2.2 的
+  `user/message` 在 `step()` 里才落盘（晚于 `tools.resolve()` 与 `systemPrompt.assemble()`），
+  此前首轮第 1 步 `sessionMode()` 100% 退回 `'weak'`，第 2 步才突然翻转为 `spec`/`react`
+  （本机 18 个会话中途变人设）。现在新增 `firstUserText()` 同时读取 `user/message` 与
+  `agent/inbox/spliced`（`data.inserted`），并在会话内锁定已解析的 `mode`，全程保持人设稳定。
+- **LongCat 家族首轮固定走 `weak` 分支**：`router-bootstrap.mjs` 此前只给 `family === 'flash'`
+  固定 `'weak'`，导致 LongCat 首条消息含构建或修复词时掉入 `0`/`1` 分支丢失 `WEAK_LONGCAT`
+  专属长上下文锚点；现将 `family === 'longcat'` 一并归入 `'weak'`。
+
+### Removed
+
+- `repeatNotice` 开关与对应的 `tools/post-execute` 监听（`repeatNoticeListener`、`REPEAT_NOTICE`、
+  `isIdenticalRepeat`、`READ_ONLY_TOOLS`）。原因：它只看紧挨着的两次调用，按本机回放只覆盖
+  LongCat 273 次真重复里的 66 次，而且只提示不拦截。判重统一交给 dsh-turn-guard 的规则 6，
+  宿主提醒、turn-guard、本插件三处重叠收成一处。旧配置写着 `repeatNotice: true` 不报错，
+  只是不再生效。
+- 删掉 `router-core.mjs` 中生产代码从未调用的 `shouldBypassCallback` 与 `isRedundantVerification`。
+- 删掉 `cordis.patch.yml` 中 `disabled: true` 的 `tool-subagent-codex` 与 `tool-subagent-claude-code`
+  两行死配置，以及 `scripts/check-composition.mjs` 中对应的两条 `only-here` 白名单（叶子行从
+  28 行收敛为 26 行，与官方 `standard` 差异从 12 处减至 10 处）。
+
+### 相关依赖
+
+- 想要重复命令拦截，装 dsh-turn-guard 0.5.0 或更高（规则 6 默认开）。
+
+## 0.6.0 — 2026-11-07 — HarnessMM 运行层真正接线（默认关）
+
+### 以前不行、现在能行
+
+0.5.x 带着 HarnessMM 的判定函数（`evaluateGuard`、`ChiselPlanScheduler`、置换凭证），但运行时
+从未触发过一次：没有任何代码调用 `loadCandidates()`，模型也没有声明候选动作的通道，
+`tools/result` 里的调度分支永远进不去。README 说「路由器还在 `tools/result` 上跑 HarnessMM
+链式置换」，与事实不符。0.6.0 补上声明通道和执行器。
+
+### Added
+
+- **`run_chain` 工具**（`chain: true` 打开）：模型一次声明 2-8 步参数已定的调用，每步可带
+  `when` 卫述（`exitCode` / `status` / `stdout_contains` / `stdout_equals` / `stderr_empty`，
+  缺省为「上一步成功」）。推进由 `ChiselPlanScheduler` 完成。每一步经 `ctx.tools.execute()`
+  走宿主完整管线，**审批、拒绝策略、沙箱对每一步照样生效**；卫述不过、被拒、出错都立即
+  停链，返回已有结果。每条链写一条 `harnessmm/substitution-certificate` 日志。
+- **幂等重复提示**（`repeatNotice: true` 打开）：`tools/post-execute` 上，同一 shell 命令、同一
+  目录、输出逐字相同时附一句提示，不拦截、不改结果。依据：本机 router-flash 会话回放，
+  36 次连续重复的 bash 命令 36 次输出相同。
+- `lib/harnessmm-runtime.mjs`（新包子路径 `dsh-router-flash/harnessmm-runtime`）。
+- `router-core.mjs`：`receiptOf()`（把宿主 `ToolExecutionResult` 归一成收据；bash 非零退出码
+  不是 `isError`，必须读 canonical value）、`validateChainArgs()`（卫述未知键一律拒绝）、
+  `isIdenticalRepeat()`。
+- `test/harnessmm-runtime.test.mjs`：纯逻辑 + 借本机 dsh 运行时的真管线测试，`npm test` 包含它。
+
+### Changed
+
+- `router-bootstrap.mjs` 删掉空转的每 agent 调度器和 `tools/result` 里永不触发的分支。
+- 首轮收窄不变：`run_chain` 不在 allow 清单里，首次工具结果后才出现。
+- `npm run typecheck` 覆盖全部 `lib/` 模块；`install.sh` 固定 v0.6.0。
+- README 第 45 行与 HarnessMM 章节按实际行为重写。
+
+### 默认关闭的功能怎么打开
+
+在 `router-bootstrap` 行的 `config` 里设 `chain: true`、`repeatNotice: true`，重启 DSH。
+
+### Not measured
+
+- 打开后真实模型是否会用 `run_chain`、能省多少次往返、是否影响完成率，都没有测过。
+- `repeatNotice` 能否减少 LongCat 的重复命令，需要打开后用会话回放对比。
+
+### 依赖
+
+仍为零运行时依赖。真管线测试从本机 dsh 运行时借 `cordis`、`dsh-system-prompt`、`dsh-tools`、
+`dsh-tool-executor-native`，找不到时跳过并打印 SKIP。
+
+## 0.5.2 — 2026-11-06 — adapt to dsh 0.2.2-rc.1
+
+- cordis 基线适配 0.2.2-rc.1，`dshReleases` 补登记 `0.2.2-rc.1`，新增 `npm run typecheck`。
+
 ## 0.5.1 — 2026-11-06 — single-file bundle patch
 
 ### Changed

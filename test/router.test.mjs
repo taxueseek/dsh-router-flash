@@ -18,8 +18,8 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
   applyPersona, coreFor, createSubstitutionCertificate, evaluateGuard,
-  isDeepSeekModel, isFlashModel, isLongCatModel, isRedundantVerification,
-  modelFamily, personaFor, sessionEvents, sessionMode, shouldBypassCallback,
+  firstUserText, isDeepSeekModel, isFlashModel, isLongCatModel,
+  modelFamily, personaFor, resolveModelId, sessionEvents, sessionMode,
   ChiselPlanScheduler,
 } from '../lib/router-core.mjs'
 import { apply } from '../lib/router-bootstrap.mjs'
@@ -77,12 +77,6 @@ assert.ok(weakLongCat.includes('strong reasoning capability'))
 assert.ok(weakLongCat.includes('Direct production anchor'))
 assert.ok(weakLongCat.includes('Single verification anchor'))
 
-// 幂等反刍拦截测试
-assert.equal(isRedundantVerification({ exitCode: 0 }, { tool: 'bash', args: { command: 'python3 test_processor.py' } }), true)
-assert.equal(isRedundantVerification({ exitCode: 0 }, { tool: 'bash', args: { command: 'python3 -m unittest test' } }), true)
-assert.equal(isRedundantVerification({ exitCode: 1 }, { tool: 'bash', args: { command: 'python3 test.py' } }), false)
-assert.equal(isRedundantVerification({ exitCode: 0 }, { tool: 'write', args: { path: 'a.py' } }), false)
-
 // --- 1.1 HarnessMM 决策卫述判定 (GDR) 与回调置换 (CCS) 单元测试 -------------
 // 5 种标准物理卫述测试
 // 1) return_code
@@ -135,15 +129,6 @@ scheduler.loadCandidates(dagCandidates)
 const failStep = scheduler.step({ return_code: 1, isError: true })
 assert.equal(failStep, null)
 assert.equal(scheduler.hasPending(), false, '卫述失败后队列必须安全清空')
-
-const validCandidate = {
-  action: { tool: 'bash', args: { command: 'pytest' } },
-  guard: { condition: 'status == success' },
-}
-assert.equal(shouldBypassCallback({ status: 'success' }, validCandidate), true)
-assert.equal(shouldBypassCallback({ status: 'error', isError: true }, validCandidate), false)
-assert.equal(shouldBypassCallback({ status: 'success' }, null), false)
-assert.equal(shouldBypassCallback({ status: 'success' }, { action: null }), false)
 
 const cert = createSubstitutionCertificate({
   sessionId: 'test-session',
@@ -430,5 +415,99 @@ const promotedAgent = {
 }
 for (const handler of events.get('agent/created') ?? []) handler({ agent: promotedAgent })
 assert.equal(restrictFilters.length, 0, '已有 tool/call 的会话不再收窄')
+
+// --- 12. 方案一回归：动态模型解析、inbox 首轮可见性、LongCat 弱引导与 UI 切模型校准 ---
+// 12.1 resolveModelId 优先级：context.modelSelection > agent.model.current() > session model/selection > agent.options.model
+assert.equal(
+  resolveModelId(
+    {
+      options: { model: 'deepseek-chat' },
+      model: { current: () => ({ model: 'auto/longcat-2.0' }) },
+      session: { snapshotEvents: () => [{ type: 'model/selection', data: { model: 'gemini-2.5-flash' } }] },
+    },
+    { modelSelection: { model: 'deepseek-v4-flash' } },
+  ),
+  'deepseek-v4-flash',
+  'context.modelSelection 优先级最高',
+)
+assert.equal(
+  resolveModelId({
+    options: { model: 'deepseek-chat' },
+    session: {
+      snapshotEvents: () => [
+        { type: 'model/selection', data: { model: 'gemini-2.5-flash' } },
+        { type: 'model/selection', data: { model: 'auto/longcat-2.0' } },
+      ],
+    },
+  }),
+  'auto/longcat-2.0',
+  '无 current() 时从会话最新一条 model/selection 读取真实模型',
+)
+
+// 12.2 Turn 1 Step 1 读 agent/inbox/spliced，且 Step 2 落盘 user/message 后人设不跳变
+const splicedEvents = [{
+  type: 'agent/inbox/spliced',
+  data: {
+    index: 0,
+    deleteCount: 0,
+    inserted: [{ type: 'user', content: [{ type: 'text', text: '修复崩溃 bug' }] }],
+  },
+}]
+assert.equal(firstUserText({ snapshotEvents: () => splicedEvents }), '修复崩溃 bug')
+assert.equal(sessionMode({ snapshotEvents: () => splicedEvents }), 0, 'Turn 1 Step 1 从 inbox 事件即可识别 spec 模式')
+
+// 验证同一 agent 在 Step 1（仅 inbox）与 Step 2（新增 user/message）的人设完全一致且锁定
+const lockListeners = []
+apply({ on: (event, handler) => lockListeners.push({ event, handler }), logger: { warn: () => {} } }, {})
+const lockAssemble = lockListeners.find((e) => e.event === 'system-prompt/assemble').handler
+let dynamicEvents = [...splicedEvents]
+const lockAgent = {
+  options: { model: 'deepseek-chat' },
+  model: { current: () => ({ model: 'gemini-2.5-flash' }) },
+  session: { id: 'session-lock', snapshotEvents: () => dynamicEvents },
+}
+const step1Out = await lockAssemble({}, { agent: lockAgent }, async () => ({
+  sections: sections.map((s) => ({ ...s })),
+  contexts: [],
+  variables: {},
+}))
+assert.equal(step1Out.sections[0].text, 'You are a helpful software engineer assistant.',
+  'UI 切换到 gemini-2.5-flash 且首轮 inbox 含修复关键词时，Step 1 直接命中 spec 人设')
+// 模拟后续事件尝试篡改文本，已锁定的会话 mode 不应翻转
+dynamicEvents = [{ type: 'user/message', data: { content: [{ text: '从零写一个网页游戏' }] } }]
+const step2Out = await lockAssemble({}, { agent: lockAgent }, async () => ({
+  sections: sections.map((s) => ({ ...s })),
+  contexts: [],
+  variables: {},
+}))
+assert.equal(step2Out.sections[0].text, step1Out.sections[0].text, '会话内锁定 mode，后续步骤绝不翻转人设')
+
+// 12.3 LongCat 即使首条消息命中 spec/react 词表也保持 WEAK_LONGCAT 专属引导
+const longcatSpecPrompt = await assemble({
+  model: 'auto/longcat-2.0',
+  events: [{ type: 'user/message', data: { content: [{ text: '修复崩溃 bug 并从零写一个组件' }] } }],
+})
+assert.ok(longcatSpecPrompt.sections[0].text.includes('Direct production anchor'),
+  'LongCat 家族一律走 weak 分支以保留 WEAK_LONGCAT 专属锚点')
+
+// 12.4 Web UI 在首轮发消息前切模型（session/event: model/selection）动态解除或重算收窄
+restrictFilters.length = 0
+lifts = 0
+let currentUiModel = 'deepseek-v4-flash'
+const uiSwitchSession = { id: 'session-ui-switch', snapshotEvents: () => [] }
+const uiSwitchAgent = {
+  options: { model: 'deepseek-v4-flash' },
+  model: { current: () => ({ provider: 'ui', model: currentUiModel }) },
+  session: uiSwitchSession,
+  ctx: { tools: fakeTools },
+}
+for (const handler of events.get('agent/created') ?? []) handler({ agent: uiSwitchAgent })
+assert.equal(restrictFilters.length, 1, '初始为 Flash 时登记收窄')
+// 用户在发消息前切换到第三方模型 gemini-2.5-flash
+currentUiModel = 'gemini-2.5-flash'
+for (const handler of events.get('session/event') ?? []) {
+  handler(uiSwitchSession, { type: 'model/selection', data: { model: 'gemini-2.5-flash' } })
+}
+assert.equal(lifts, 1, '切换到第三方模型后立即解除首轮收窄')
 
 console.log('router-flash preset: all checks passed')

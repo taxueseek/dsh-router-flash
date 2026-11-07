@@ -15,10 +15,9 @@ import path from 'node:path'
 import { execSync } from 'node:child_process'
 import {
   createSubstitutionCertificate,
-  isRedundantVerification,
+  evaluateGuard,
   modelFamily,
   personaFor,
-  shouldBypassCallback,
 } from '../lib/router-core.mjs'
 
 const GATEWAY_URL = 'http://127.0.0.1:3425/v1/chat/completions'
@@ -214,9 +213,14 @@ async function runMultiTurnSession({ modelId, enableHarnessMM = true }) {
         let toolArgs = {}
         try { toolArgs = JSON.parse(tc.function.arguments) } catch {}
 
-        // HarnessMM 幂等反刍拦截：避免模型重复换姿势跑相同测试
-        if (enableHarnessMM && isRedundantVerification(lastTestReceipt, { tool: toolName, args: toolArgs })) {
-          console.log(`    🛑 [HarnessMM 幂等反刍拦截] 检测到冗余测试动作 (${toolArgs.command})，本地复用成功结果，终结慢推理！`)
+        // 重复命令检测由 dsh-turn-guard 规则 6 处理；本离线评测跳过未变更工作区的重复测试命令
+        const isRepeatTest = Boolean(
+          lastTestReceipt?.exitCode === 0
+          && toolName === 'bash'
+          && /\b(pytest|unittest|python3?\s+-m\s+unittest|python3?\s+test_|npm\s+test|node\s+--test)\b/i.test(String(toolArgs.command ?? '')),
+        )
+        if (enableHarnessMM && isRepeatTest) {
+          console.log(`    🛑 [幂等反刍拦截] 检测到冗余测试动作 (${toolArgs.command})，本地复用成功结果，终结慢推理！`)
           stats.bypassedCalls++
           const currentContextTokens = (usage.prompt_tokens || 1000) + (usage.completion_tokens || 300)
           stats.estimatedTokensSaved += currentContextTokens
@@ -246,7 +250,7 @@ async function runMultiTurnSession({ modelId, enableHarnessMM = true }) {
             guard: { condition: 'status == success' },
           }
 
-          if (shouldBypassCallback(receipt, candidate)) {
+          if (evaluateGuard(candidate.guard, receipt)) {
             console.log(`    🎉 [HarnessMM GDR] 命中卫述条件！触发置换 (Bypass) 下一次慢思考！`)
             console.log(`    🚀 原生调度验证动作: ${candidate.action.tool} -> ${candidate.action.args.command}`)
 

@@ -44,13 +44,17 @@ What it does:
 | **Match** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)` — model- and channel-agnostic; `modelFamily()` splits ids into `flash` / `deepseek` / `longcat` / `third-party` |
 | **Persona** | For Flash, always the weak branch (w7 guidance): classify, review, stay on topic, think deeply, close the loop |
 | **First turn** | Only `read` / `write` / `edit` plus the platform shell (`bash`, or `pwsh` on Windows) |
-| **After the first `tool/call`** | The full 28-row catalog opens; the router also runs the HarnessMM chained bypass on `tools/result` |
+| **After the first `tool/call`** | The full 26-row catalog opens; when `chain: true` is enabled, `run_chain` is also exposed (off by default) |
 
 The router hooks the `system-prompt/assemble` seam for persona routing. On
 DSH 0.2.2+ the first-turn narrowing is registered via `ctx.tools.restrict()`
-on `agent/created` and lifted on the first `tools/result`; on older hosts the
-assemble payload still carries `tools` and the filter runs there. Mode derives
-from durable session events, so resume/reload keeps it.
+on `agent/created` (and re-evaluated on `model/selection` / `turn/start` before
+any tool call) and lifted on the first `tools/result`; `resolveModelId()` reads
+the live model selection and `firstUserText()` reads `agent/inbox/spliced` on
+Turn 1 Step 1 while locking the mode per session so the persona never flips
+between Step 1 and Step 2. On older hosts the assemble payload still carries
+`tools` and the filter runs there. Mode derives from durable session events, so
+resume/reload keeps it.
 
 ## Model-agnostic by design
 
@@ -104,27 +108,17 @@ negative optimisation for them.
 not from who resells it. Any channel's DeepSeek V4 Flash should get the same
 guidance; channel differences belong in the `provider` config, not the preset.
 
-## HarnessMM decision reuse (GDR / CCS)
+## HarnessMM decision reuse (wired since 0.6.0, off by default)
 
-`lib/router-core.mjs` carries a deterministic decision-reuse layer derived from
-[HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM) (Apache-2.0). It lets
-the model declare a short chain of deterministic follow-up actions in one slow
-thinking pass, and the controller executes them locally without another model
-call — as long as each step's guard is satisfied by the previous step's receipt.
+Derived from [HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM) (Apache-2.0).
+0.6.0 wires the decision-reuse layer to the DSH host via `lib/harnessmm-runtime.mjs`,
+controlled on the `router-bootstrap` row's `config` (**off by default**):
 
-| Export | Role |
-|---|---|
-| `evaluateGuard(guard, receipt)` | Evaluates a tool receipt against a guard: `return_code` / `exitCode`, `stdout_contains`, `stdout_equals`, `stderr_empty`, `json_equals`, `status == success` |
-| `shouldBypassCallback(receipt, candidate)` | True when a candidate action's guard is satisfied and its args are complete (literal closure) |
-| `ChiselPlanScheduler` | Per-session queue of candidate nodes; `step(receipt)` advances and returns the next action, or `null` when the guard fails (safe fallback to the model) |
-| `createSubstitutionCertificate(meta)` | Audit record for a bypassed slow-thinking call |
-| `isRedundantVerification(prevReceipt, currentAction)` | Idempotence guard: suppresses re-running an already-passed test command |
+| Key | What the model sees when enabled | Execution |
+|---|---|---|
+| `chain: true` | An additional tool `run_chain`: declares 2-8 steps with fully decided arguments and optional `when` guards | Each step dispatches through `ctx.tools.execute()` across the full host pipeline (`tools/pre-execute` approval, `tools.guard()`, sandbox, timeout). Any failed guard, denied approval, or step error stops the chain immediately and returns the results so far |
 
-The wiring lives in `lib/router-bootstrap.mjs`: `agent/created` registers the
-first-turn `tools.restrict()`; `tools/result` lifts the restriction and feeds
-the receipt to the scheduler. The scheduler's queue is populated by the model's
-own declared candidates — the preset does not invent actions. When a guard
-fails, the queue is cleared and control returns to the model's normal reasoning.
+Repeated-command detection is handled by `dsh-turn-guard` Rule 6 (removed from this plugin in 0.6.1).
 
 This is the same logic that carries the Apache-2.0 notice in `LICENSE` /
 `NOTICE`; see 「Credits and provenance」.
@@ -481,7 +475,7 @@ for themselves — that is the deployment's trade-off, not the preset's.
 
 ## Known differences from the official `standard`
 
-27 of the 28 leaf rows in `cordis.patch.yml` (the preset declaration insert) point at someone
+25 of the 26 leaf rows in `cordis.patch.yml` (the preset declaration insert) point at someone
 else's package (96%). So that "upstream changed and this did not follow" can no
 longer be silent, the differences are frozen into a table where every entry
 needs a reason, enforced by `npm test`: **the difference set against the
@@ -491,12 +485,11 @@ an explanation, one missing must be deleted (anti-rot).
 | Row | Nature | Reason |
 |---|---|---|
 | `router-bootstrap` | only here | the router itself |
-| `command-goal` / `present` / `tool-plugin-manager` / `tool-plugin-market` / `tool-subagent-list-agents` | official only | family tool face: not restored (the first two — see 「Tool face」; `tool-plugin-manager` / `tool-plugin-market` belong to the host/deployment layer, and the official rows are themselves `disabled: true`; `tool-subagent-list-agents` was removed in 0.2.2-alpha.2 — `list_agents` moved into the control package's main entry) |
+| `command-goal` / `present` / `tool-plugin-manager` / `tool-plugin-market` | official only | family tool face: not restored (the first two — see 「Tool face」; `tool-plugin-manager` / `tool-plugin-market` belong to the host/deployment layer, and the official rows are themselves `disabled: true`) |
 | `persona` | different value | different identity sentence and no `suffix`; this row is only a fallback, replaced wholesale by the router at assembly time |
 | `tool-ralph` | only here | official 0.2.1 removed the row entirely; this preset still enables `maxRounds: 64` — **a real difference, keep-or-drop pending a measurement** |
 | `tool-subagent` | different value | missing 0.2.0's new `modelSelectionSettings: true` (a model-visible addition, not followed without measurement) |
 | `tool-subagent-fork` | different value | this preset adds `backgroundMode: continuable`; official has no such key |
-| `tool-subagent-codex` / `-claude-code` | only here | both rows are `disabled: true`, register no tools, and are unobservable |
 | `tool-web` | different value | family value `fetch: false` (a model-visible subtraction, not changed without measurement) |
 
 **Differences 0.4.1 already eliminated**: `time-context` and `tool-schedule`
@@ -548,17 +541,21 @@ check script borrows `js-yaml` and the official preset files from the local
 dsh runtime.
 
 - `test/router.test.mjs` — pure logic regression: model detection (DeepSeek
-  Flash matches, other families' same-named flash does not), persona in-place
-  replacement and deduplication, first-turn tool face (core + platform shell),
-  the full catalog opening after the first `tool/call`, runtime context
-  preservation, keyword classification, the degradation warning when no shell
+  Flash matches, other families' same-named flash does not), dynamic model
+  resolution (`resolveModelId`), persona in-place replacement and deduplication,
+  first-turn tool face (core + platform shell), the full catalog opening after
+  the first `tool/call`, runtime context preservation, first-turn inbox keyword
+  classification and session mode locking, the degradation warning when no shell
   exists, delivery-form self-consistency (declaration row id / `config.id` /
   in-package subpath reference), the HarnessMM decision-reuse layer
-  (`evaluateGuard` / `shouldBypassCallback` / `ChiselPlanScheduler` /
-  `createSubstitutionCertificate` / `isRedundantVerification`), the 0.2.2+
-  `tools.restrict()` path, plus 0.4.1's two additions: the clock row and
-  the schedule row must be in the composition, and `flashGuidance:false` must
-  fall back to the neutral sentence and never to the spec sentence.
+  (`evaluateGuard` / `ChiselPlanScheduler` / `createSubstitutionCertificate`),
+  the 0.2.2+ `tools.restrict()` and UI model-switch path, plus 0.4.1's two
+  additions: the clock row and the schedule row must be in the composition, and
+  `flashGuidance:false` must fall back to the neutral sentence and never to the
+  spec sentence.
+- `test/harnessmm-runtime.test.mjs` — `run_chain` argument validation, receipt
+  normalisation, stop rules, off-by-default behaviour, plus live host pipeline
+  verification with `cordis` and `dsh-tools`.
 - `scripts/check-composition.mjs` — contract check, four assertions each
   reporting on its own: ① the declaration row is structurally consistent;
   ② every self-reference is provided by `exports` and the file exists;
@@ -580,23 +577,23 @@ dsh runtime.
   own `longcat` family with a dedicated long-context persona.
 - Complex build tasks (large projects, greenfield development) benefit most
   from the deep-thinking anchor.
-- The HarnessMM decision-reuse layer applies to every family: the model can
-  declare a short deterministic chain and the controller executes it locally
-  while each guard holds, falling back to normal reasoning the moment one
-  fails.
+- The HarnessMM runtime layer (`chain`) is off by default; when enabled it
+  applies to every family.
 
 ## Package layout
 
 ```
 dsh-router-flash/
 ├── package.json                     # dsh.bundle (single patch) + dsh.client + 24 peer declarations
-├── cordis.patch.yml                 # both inserts: the dsh-router-flash host row (legacy-dir check) + the @deepseek-ai/dsh-agent-preset declaration row (the composition, 28 rows)
+├── cordis.patch.yml                 # both inserts: the dsh-router-flash host row (legacy-dir check) + the @deepseek-ai/dsh-agent-preset declaration row (the composition, 26 rows)
 ├── lib/
 │   ├── index.js                     # host side: read-only check of the legacy directory, no more disk writes
 │   ├── client.js                    # client side: empty placeholder (no browser UI)
-│   ├── router-bootstrap.mjs         # the router: assemble hook (persona routing) + agent/created tools.restrict + tools/result HarnessMM chained bypass
-│   └── router-core.mjs              # pure routing logic: mode detection / persona / tool face / HarnessMM decision reuse (zero dependencies)
+│   ├── router-bootstrap.mjs         # the router: assemble hook (persona routing) + agent/created tools.restrict + HarnessMM wiring
+│   ├── router-core.mjs              # pure routing logic: mode detection / persona / tool face / HarnessMM decision reuse (zero dependencies)
+│   └── harnessmm-runtime.mjs        # run_chain tool (0.6.0)
 ├── test/router.test.mjs             # pure-logic self-check
+├── test/harnessmm-runtime.test.mjs  # run_chain: pure logic + live host pipeline
 ├── scripts/check-composition.mjs    # contract check (structure / references / resolvability / baseline-diff whitelist)
 ├── install.sh                       # git-channel installer
 ├── intro.png                        # hero image
@@ -604,9 +601,8 @@ dsh-router-flash/
 └── ui-first-turn-tools.png          # actual UI: first-turn tool face
 ```
 
-`dsh.bundle.patch` is an **array** (the official `dsh-web-app` uses it the same
-way): the host row and the preset declaration each get their own file, so
-whichever half changes, that half is the diff.
+`dsh.bundle.patch` is a **single string** (`"./cordis.patch.yml"`) since 0.5.1,
+carrying both the host row and the preset declaration insert in one file.
 
 ## Notes
 

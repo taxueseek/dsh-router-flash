@@ -42,11 +42,13 @@ dsh 网页端里模型无关的 agent preset——只看模型 id，首轮收窄
 | **命中** | `isFlashModel(id) = /deepseek/i.test(id) && /flash/i.test(id)`，模型与渠道都无关；`modelFamily()` 把 id 分成 `flash` / `deepseek` / `longcat` / `third-party` 四家族 |
 | **persona** | 对 Flash 一律 weak 分支（w7 引导）：分类、回顾、反跑题、深度思考、决策闭环 |
 | **首轮** | 只给 `read` / `write` / `edit` 加平台 shell（`bash`，Windows 上是 `pwsh`） |
-| **首次 `tool/call` 之后** | 放开 28 行全目录；路由器还在 `tools/result` 上跑 HarnessMM 链式置换 |
+| **首次 `tool/call` 之后** | 放开 26 行全目录；打开 `chain` 时目录里多一个 `run_chain`（默认关） |
 
 路由器挂在 `system-prompt/assemble` 接缝上做人设路由。DSH 0.2.2+ 的首轮收窄
-在 `agent/created` 时经 `ctx.tools.restrict()` 登记、首次 `tools/result` 后解除；
-旧宿主上 assemble 载荷仍带 `tools`，过滤在那里跑。模式由持久会话事件推导，
+在 `agent/created`、首轮 `model/selection` 与 `turn/start` 时经 `ctx.tools.restrict()` 登记，
+首次 `tools/result` 后解除；模型 ID 通过 `resolveModelId()` 从动态选择器状态读取，首轮
+模式从 `agent/inbox/spliced` 事件推导并在会话内锁定，避免 Step 1→Step 2 人设翻转击穿
+KV 缓存；旧宿主上 assemble 载荷仍带 `tools`，过滤在那里跑。模式由持久会话事件推导，
 所以 resume / reload 之后仍然保持。
 
 ## 模型无关，是演化出来的分支
@@ -96,29 +98,47 @@ DeepSeek 模型一起卷进 Flash 的弱 persona，对它们是负优化。
 渠道的 DeepSeek V4 Flash 都该拿到同一套引导；渠道差异用 `provider` 配置表达，不进
 preset。
 
-## HarnessMM 决策重用（GDR / CCS）
+## HarnessMM 决策重用（0.6.0 起真正接线，默认关）
 
-`lib/router-core.mjs` 带一层来自 [HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM)（Apache-2.0）
-的确定性决策重用逻辑。模型可以在一次慢思考里声明一小串确定性后续动作，控制器在
-本地连续置换执行，只要每一步的卫述被上一步的收据满足——不必再调一次模型。
+逻辑来自 [HarnessMM](https://github.com/YuhuaJiang2002/HarnessMM)（Apache-2.0）。0.5.x 只带了
+判定函数，没有声明通道，也没有执行器，运行时从未触发过一次。0.6.0 把它接到宿主上，开关在 `router-bootstrap` 行的 `config` 里，**默认关**：
 
-| 导出 | 作用 |
-|---|---|
-| `evaluateGuard(guard, receipt)` | 用卫述条件评估工具收据：`return_code` / `exitCode`、`stdout_contains`、`stdout_equals`、`stderr_empty`、`json_equals`、`status == success` |
-| `shouldBypassCallback(receipt, candidate)` | 候选动作的卫述被满足且参数完整（字面闭合）时为真 |
-| `ChiselPlanScheduler` | 每会话的候选节点队列；`step(receipt)` 推进并返回下一个动作，卫述不满足时返回 `null`（安全回退给模型） |
-| `createSubstitutionCertificate(meta)` | 为被置换掉的慢思考调用留审计凭证 |
-| `isRedundantVerification(prevReceipt, currentAction)` | 幂等拦截：上一步测试已通过时，抑制重复跑同一个测试 |
+| 开关 | 打开后模型看到什么 | 怎么执行 |
+|---|---|---|
+| `chain: true` | 多一个工具 `run_chain`：一次声明 2-8 步已经定好参数的调用，每步可带 `when` 卫述 | 每一步经 `ctx.tools.execute()` 走宿主完整管线（`tools/pre-execute` 审批、`tools.guard()`、沙箱、超时）。卫述不过、被拒、出错都立即停链，返回已有结果，交还模型 |
 
-接线在 `lib/router-bootstrap.mjs`：`agent/created` 登记首轮 `tools.restrict()`；
-`tools/result` 解除收窄并把收据喂给调度器。队列由模型自己声明的候选填充——preset
-不发明动作。卫述失败时队列清空，控制权交还模型的正常推理。
+重复命令检测不在本插件：0.6.0 曾带 `repeatNotice`，0.6.1 移除，统一由
+[dsh-turn-guard](../dsh-turn-guard) 的规则 6（Shell 输出复用）负责。旧配置里写着
+`repeatNotice: true` 不会报错，只是不再生效。
 
-这段逻辑是 `LICENSE` / `NOTICE` 里 Apache-2.0 例外的同一部分，见「致谢与来源」。
+`run_chain` 的边界：
+
+- **不绕过审批**：插件本身不执行任何命令，每一步都是一次普通的工具调用，用户审批、
+  拒绝策略对链里的每一步照样生效。被拒的一步之后的步骤一步都不跑。
+- **卫述只看物理收据**：`exitCode`、`status`、`stdout_contains`、`stdout_equals`、
+  `stderr_empty`。缺省为「上一步成功」：没有错误，退出码 0，没超时，没被信号杀掉。
+  bash 的非零退出码在宿主里不算 `isError`，收据从 canonical value 读退出码。
+- **拼错即拒**：`when` 里出现未知键（例如 `exitcode`）时整条链报错、一步不跑。
+  判定函数对未知键放行，不拦就等于「无条件继续」。
+- **首轮不可见**：它注册为全局工具，首轮收窄的 allow 清单不含它，首次工具结果后才出现。
+- **不能递归**：链里不能再放 `run_chain`。
+- **留审计**：每条链结束写一条 `harnessmm/substitution-certificate` 日志，记录被置换的
+  模型往返数（完成步数 - 1）和停链原因。
+
+打开方式（覆盖 `router-bootstrap` 行的 config，或直接改已安装包里的 `cordis.patch.yml`）：
+
+```yaml
+- id: router-bootstrap
+  name: dsh-router-flash/router-bootstrap
+  config:
+    chain: true
+```
+
+为什么默认关：它改变模型可见的工具面，没有对照测量就不改默认。
 
 ## 安装
 
-需要 harness ≥ 0.2.0-rc.2（在 0.2.0-rc.2 上实测，0.2.1-rc.1 在跑）。
+需要 harness ≥ 0.2.0-rc.2（0.6.0 在 0.2.2-rc.1 上实测）。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/taxueseek/dsh-router-flash/main/install.sh | sh
@@ -410,7 +430,7 @@ preset。逐版本核过 npm 包后的实际时间线：
 
 ## 组合与官方 standard 的已知差异
 
-`cordis.patch.yml`（preset 声明 insert）的 28 个叶子行里有 27 行指向别人的包（96%）。为了让
+`cordis.patch.yml`（preset 声明 insert）的 26 个叶子行里有 25 行指向别人的包（96%）。为了让
 「上游改了、这里没跟」不再静默，差异被固化成一张必须逐条给理由的表，并由 `npm test`
 强制：
 **与官方 `standard` preset 的差异集必须恰好等于白名单**，多一条要解释，少一条要删
@@ -419,12 +439,11 @@ preset。逐版本核过 npm 包后的实际时间线：
 | 行 | 性质 | 理由 |
 |---|---|---|
 | `router-bootstrap` | 只本 preset 有 | 路由器本身 |
-| `command-goal` / `present` / `tool-plugin-manager` / `tool-plugin-market` / `tool-subagent-list-agents` | 只官方有 | 家族工具面：不补（前两者见「工具面」；`tool-plugin-manager` / `tool-plugin-market` 属宿主/部署层，且官方行本身 `disabled: true`；`tool-subagent-list-agents` 在 0.2.2-alpha.2 被移除——`list_agents` 并入 control 包主入口） |
+| `command-goal` / `present` / `tool-plugin-manager` / `tool-plugin-market` | 只官方有 | 家族工具面：不补（前两者见「工具面」；`tool-plugin-manager` / `tool-plugin-market` 属宿主/部署层，且官方行本身 `disabled: true`） |
 | `persona` | 取值不同 | 身份句不同且无 `suffix`；本行只是 fallback，装配时被路由器整体替换 |
 | `tool-ralph` | 只本 preset 有 | 官方 0.2.1 已整行移除；本 preset 仍开 `maxRounds: 64`——**真实差异，去留待一次测量** |
 | `tool-subagent` | 取值不同 | 缺 0.2.0 新增的 `modelSelectionSettings: true`（模型可见加法，未测量不跟） |
 | `tool-subagent-fork` | 取值不同 | 本 preset 多 `backgroundMode: continuable`（可续聊），官方无该键 |
-| `tool-subagent-codex` / `-claude-code` | 只本 preset 有 | 两行均 `disabled: true`，不注册工具，不可观测 |
 | `tool-web` | 取值不同 | 家族取值 `fetch: false`（模型可见减法，未测量不改） |
 
 **0.4.1 已消掉的差异**：`time-context`、`tool-schedule` 从「只官方有」变成两边都有
@@ -458,20 +477,23 @@ preset。逐版本核过 npm 包后的实际时间线：
 ## 自检
 
 ```bash
-npm test          # = node test/router.test.mjs && node scripts/check-composition.mjs
+npm test          # = router.test + harnessmm-runtime.test + check-composition
 ```
 
 **不需要 `npm install`**：本包零依赖，体检脚本从本机的 dsh 运行时借 `js-yaml` 与官方
 preset 文件。
 
 - `test/router.test.mjs` —— 纯逻辑回归：模型识别（DeepSeek Flash 命中、同名 flash 的
-  其他家族不命中）、persona 原位替换与去重、首轮工具面（core + 平台 shell）、首次
-  `tool/call` 后放开全目录、运行时上下文保留、关键词分类、缺 shell 时的降级告警、
-  交付形态自洽（声明行 id / `config.id` / 包子路径引用）、HarnessMM 决策重用层
-  （`evaluateGuard` / `shouldBypassCallback` / `ChiselPlanScheduler` /
-  `createSubstitutionCertificate` / `isRedundantVerification`）、0.2.2+ 的
-  `tools.restrict()` 路径，以及 0.4.1 新增的两条：时钟行与定时行必须在组合里、
-  `flashGuidance:false` 必须退回中性句且不得退回 spec 句。
+  其他家族不命中）、`resolveModelId()` 动态模型解析、persona 原位替换与去重、首轮工具面
+  （core + 平台 shell）、首次 `tool/call` 后放开全目录、运行时上下文保留、首轮 inbox
+  关键词分类与会话模式锁定、缺 shell 时的降级告警、交付形态自洽（声明行 id / `config.id` /
+  包子路径引用）、HarnessMM 决策重用层（`evaluateGuard` / `ChiselPlanScheduler` /
+  `createSubstitutionCertificate`）、0.2.2+ 的 `tools.restrict()` 与 UI 切模型重算路径，
+  以及 0.4.1 新增的两条：时钟行与定时行必须在组合里、`flashGuidance:false` 必须退回中性句
+  且不得退回 spec 句。
+- `test/harnessmm-runtime.test.mjs` —— `run_chain` 参数校验、收据归一、停链规则、默认关；
+  并借本机 dsh 运行时的 `cordis`、`dsh-tools`、native executor 跑真管线，验证每步经过
+  `tools/pre-execute`、被拒即停链。找不到 dsh 时这一段打印 SKIP。
 - `scripts/check-composition.mjs` —— 契约体检，四条断言各自报出：①声明行结构自洽；
   ②自有引用都能由 `exports` 提供且文件存在；③组合里每个 `@deepseek-ai/...` 行名都能在
   当前 dsh 运行时里解析（**改名漂移的拦网**）；④与官方 `standard` 的差异集恰好等于
@@ -485,21 +507,22 @@ preset 文件。
   首轮；中性句是 opt-in（`thirdPartyGuidance: neutral`）。LongCat 系 id 另成
   `longcat` 家族，配龙猫专属长上下文人设。
 - 复杂构建任务（如大型工程、从零开发）尤其受益于深度思考锚。
-- HarnessMM 决策重用层对所有家族生效：模型可以声明一小串确定性链条，控制器在
-  每一步卫述成立时本地执行，一旦失败立即回退给模型的正常推理。
+- HarnessMM 运行层（`chain`）默认关；打开后对所有家族生效。
 
 ## 包结构
 
 ```
 dsh-router-flash/
 ├── package.json                     # dsh.bundle（单条补丁）+ dsh.client + 24 条 peer 声明
-├── cordis.patch.yml                 # 两条 insert：dsh-router-flash 宿主行（旧目录体检）+ @deepseek-ai/dsh-agent-preset 声明行（组合本体，28 行）
+├── cordis.patch.yml                 # 两条 insert：dsh-router-flash 宿主行（旧目录体检）+ @deepseek-ai/dsh-agent-preset 声明行（组合本体，26 行）
 ├── lib/
 │   ├── index.js                     # host 端：只读体检旧形态目录，不再写盘
 │   ├── client.js                    # client 端：空实现占位（无浏览器 UI）
-│   ├── router-bootstrap.mjs         # 路由器：assemble 钩子（persona 路由）+ agent/created tools.restrict + tools/result HarnessMM 链式置换
-│   └── router-core.mjs              # 路由纯逻辑：模式识别 / persona / 工具面 / HarnessMM 决策重用（零依赖）
+│   ├── router-bootstrap.mjs         # 路由器：assemble 钩子（persona 路由）+ agent/created tools.restrict + HarnessMM 开关接线
+│   ├── router-core.mjs              # 路由纯逻辑：模式识别 / persona / 工具面 / HarnessMM 判定（零依赖）
+│   └── harnessmm-runtime.mjs        # run_chain 工具（0.6.0）
 ├── test/router.test.mjs             # 纯逻辑自检
+├── test/harnessmm-runtime.test.mjs  # run_chain：纯逻辑 + 真宿主管线
 ├── scripts/check-composition.mjs    # 契约体检（结构 / 引用 / 可解析 / 基线差异白名单）
 ├── install.sh                       # git 渠道安装脚本
 ├── intro.png                        # 头图
@@ -507,8 +530,7 @@ dsh-router-flash/
 └── ui-first-turn-tools.png          # 实际 UI：首轮工具面
 ```
 
-`dsh.bundle.patch` 是**数组**（官方 `dsh-web-app` 也这么用）：宿主行与 preset 声明各自
-一个文件，改哪半边就 diff 哪半边。
+`dsh.bundle.patch`自 0.5.1 起合并为**单文件字符串** `"./cordis.patch.yml"`，同时包含宿主行与 preset 声明两条 `insert`，以通过插件市场的静态门禁与深比较验收。
 
 ## 说明
 

@@ -10,9 +10,8 @@
 
 import assert from 'node:assert/strict'
 import {
-  applyPersona, coreFor, createSubstitutionCertificate, evaluateGuard,
+  applyPersona, ChiselPlanScheduler, coreFor, createSubstitutionCertificate, evaluateGuard,
   isDeepSeekModel, isFlashModel, isLongCatModel, modelFamily, personaFor,
-  shouldBypassCallback,
 } from '../lib/router-core.mjs'
 import { apply } from '../lib/router-bootstrap.mjs'
 
@@ -80,9 +79,11 @@ const testCases = [
 
 for (const tc of testCases) {
   console.log(`\n测试用例: [${tc.model}] ${tc.desc}`)
-  // 1. Guard 成功场景：Bypass 触发
-  const canBypassOnSuccess = shouldBypassCallback(tc.receiptSuccess, tc.nextCandidate)
-  assert.equal(canBypassOnSuccess, true, '正常完成时必须触发回调置换')
+  // 1. Guard 成功场景：ChiselPlanScheduler 推进
+  const scheduler = new ChiselPlanScheduler('session-demo-01')
+  scheduler.loadCandidates([tc.nextCandidate])
+  const nextAction = scheduler.step(tc.receiptSuccess)
+  assert.deepEqual(nextAction, tc.nextCandidate.action, '正常完成时必须触发回调置换')
   const cert = createSubstitutionCertificate({
     sessionId: 'session-demo-01',
     modelId: tc.model,
@@ -94,8 +95,9 @@ for (const tc of testCases) {
   console.log(`  -> 生成置换审计凭证: kind=${cert.kind}, bypassed=${cert.bypassedTool}`)
 
   // 2. Guard 失败场景：安全回退 (Abstention Deferral)，不强行执行
-  const canBypassOnFail = shouldBypassCallback(tc.receiptFail, tc.nextCandidate)
-  assert.equal(canBypassOnFail, false, '前置失败时严禁置换，必须交回大模型慢思考')
+  scheduler.loadCandidates([tc.nextCandidate])
+  const blockedAction = scheduler.step(tc.receiptFail)
+  assert.equal(blockedAction, null, '前置失败时严禁置换，必须交回大模型慢思考')
   console.log('  -> 异常场景安全回退：顺利交还大模型，零能力遗憾 (Zero-Regret) 约束保持成立')
 }
 

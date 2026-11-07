@@ -1,6 +1,6 @@
 {
   "name": "dsh-router-flash",
-  "version": "0.5.2",
+  "version": "0.6.1",
   "description": "DSH agent preset 分发包：探索模式（DeepSeek V4 Flash，模型 id 命中即生效，不绑定渠道）。以 @deepseek-ai/dsh-agent-preset 声明行交付，安装即生效，无落盘同步。",
   "type": "module",
   "main": "lib/index.js",
@@ -9,7 +9,8 @@
     "./client": "./lib/client.js",
     "./router-bootstrap": "./lib/router-bootstrap.mjs",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./harnessmm-runtime": "./lib/harnessmm-runtime.mjs"
   },
   "files": [
     "lib/",
@@ -77,8 +78,8 @@
     }
   },
   "scripts": {
-    "test": "node test/router.test.mjs && node scripts/check-composition.mjs",
-    "typecheck": "node --check lib/index.js && node --check lib/client.js",
+    "test": "node test/router.test.mjs && node test/harnessmm-runtime.test.mjs && node scripts/check-composition.mjs",
+    "typecheck": "node --check lib/index.js && node --check lib/client.js && node --check lib/router-core.mjs && node --check lib/router-bootstrap.mjs && node --check lib/harnessmm-runtime.mjs",
     "replay": "node scripts/replay-routing.mjs"
   },
   "peerDependencies": {
